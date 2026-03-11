@@ -1,35 +1,48 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState, useEffect } from 'react';
+import { saeService } from './services/saeService';
+import './App.css'; // On garde le CSS par défaut pour l'instant
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [saes, setSaes] = useState([]);
+  const [erreur, setErreur] = useState(null);
+
+  // useEffect permet d'exécuter le fetch au chargement de la page
+  useEffect(() => {
+    const chargerSae = async () => {
+      try {
+        const donnees = await saeService.getListeSae();
+        setSaes(donnees);
+      } catch (err) {
+        setErreur("Impossible de charger les SAE : " + err.message);
+      }
+    };
+
+    chargerSae();
+  }, []);
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="dashboard-container">
+      <h1>Plateforme de suivi des SAE</h1>
+      <h2>Vue Étudiant : Tableau de bord</h2>
+
+      {erreur && <p style={{ color: 'red' }}>{erreur}</p>}
+
+      <div className="sae-list">
+        {saes.length === 0 && !erreur ? (
+          <p>Chargement des SAE...</p>
+        ) : (
+          saes.map((sae) => (
+            <div key={sae.id} className="sae-card">
+              <h3>{sae.titre}</h3>
+              <p><strong>Description:</strong> {sae.description}</p>
+              <p><strong>Semestre:</strong> {sae.semestre}</p>
+              <p><strong>État:</strong> {sae.etat}</p>
+            </div>
+          ))
+        )}
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    </div>
+  );
 }
 
-export default App
+export default App;
