@@ -17,17 +17,24 @@ const saeList = [
 ];
 
 // 1. Endpoint d'authentification (Login)
+// 1. Endpoint d'authentification (Login)
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
 
-  // Vérification avec des identifiants fictifs (autorisé par le sujet)
+  // Compte Étudiant
   if (username === "etudiant" && password === "mmi2026") {
-    // Génération du JWT signé
-    const token = jwt.sign({ username: username, role: "etudiant" }, SECRET_KEY, { expiresIn: '2h' });
-    res.json({ token: token });
-  } else {
-    res.status(401).json({ message: "Identifiants incorrects" });
-  }
+    const token = jwt.sign({ username, role: "etudiant" }, SECRET_KEY, { expiresIn: '2h' });
+    // On renvoie le token ET le rôle pour faciliter la vie du Front-end
+    return res.json({ token: token, role: "etudiant" });
+  } 
+  // Compte Enseignant
+  else if (username === "enseignant" && password === "prof2026") {
+    const token = jwt.sign({ username, role: "enseignant" }, SECRET_KEY, { expiresIn: '2h' });
+    return res.json({ token: token, role: "enseignant" });
+  } 
+  
+  // Si rien ne correspond
+  res.status(401).json({ message: "Identifiants incorrects" });
 });
 
 // 2. Middleware pour vérifier le Token sur les routes protégées
