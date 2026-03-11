@@ -2,7 +2,7 @@
 
 // ATTENTION : Dans Codespaces, remplace localhost par l'URL exacte de ton API
 // que tu avais dans la barre d'adresse (ex: https://automatic-space...8000.app.github.dev/api/sae)
-const API_URL = 'TON_URL_CODESPACES_ICI'; 
+const API_URL = 'https://automatic-space-umbrella-wrv4grq6wqjphgvrg-8000.app.github.dev/api/sae'; 
 
 export const saeService = {
   getListeSae: async () => {
