@@ -1,8 +1,7 @@
 // frontend/src/services/saeService.js
 
-// ATTENTION : Dans Codespaces, remplace localhost par l'URL exacte de ton API
-// que tu avais dans la barre d'adresse (ex: https://automatic-space...8000.app.github.dev/api/sae)
-const API_URL = 'https://automatic-space-umbrella-wrv4grq6wqjphgvrg-8000.app.github.dev/api/sae'; 
+// N'oublie pas de remplacer par l'URL de ton port 8000 rendu public !
+const API_URL = 'https://TON_URL_CODESPACES_ICI/api/sae'; 
 
 export const saeService = {
   getListeSae: async () => {
