@@ -50,27 +50,28 @@ function App() {
   }, [token]);
 
   // --- VUE 1 : Formulaire de connexion ---
+// --- VUE 1 : Formulaire de connexion ---
   if (!token) {
     return (
-      <div className="dashboard-container">
-        <h1>Plateforme SAE - Connexion</h1>
-        <form onSubmit={handleLogin} style={{ maxWidth: '300px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          {erreur && <p style={{ color: 'red' }}>{erreur}</p>}
+      <div className="login-wrapper">
+        <h1>Connexion MMI</h1>
+        <form onSubmit={handleLogin}>
+          {erreur && <p style={{ color: '#ef4444', fontWeight: '500' }}>{erreur}</p>}
           <input 
             type="text" 
-            placeholder="Nom d'utilisateur (etudiant)" 
+            placeholder="Nom d'utilisateur" 
             value={username} 
             onChange={(e) => setUsername(e.target.value)} 
             required 
           />
           <input 
             type="password" 
-            placeholder="Mot de passe (mmi2026)" 
+            placeholder="Mot de passe" 
             value={password} 
             onChange={(e) => setPassword(e.target.value)} 
             required 
           />
-          <button type="submit">Se connecter</button>
+          <button type="submit" className="btn-primary">Se connecter</button>
         </form>
       </div>
     );
@@ -79,13 +80,14 @@ function App() {
   // --- VUE 2 : Tableau de bord sécurisé ---
   return (
     <div className="dashboard-container">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1>Plateforme de suivi des SAE</h1>
-        <button onClick={handleLogout} style={{ background: '#e74c3c', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '5px', cursor: 'pointer' }}>Déconnexion</button>
+      <div className="header-dashboard">
+        <h1>Suivi des SAE</h1>
+        <button onClick={handleLogout} className="btn-logout">Déconnexion</button>
       </div>
+      
       <h2>Vue Étudiant : Tableau de bord</h2>
 
-      {erreur && <p style={{ color: 'red' }}>{erreur}</p>}
+      {erreur && <p style={{ color: '#ef4444' }}>{erreur}</p>}
 
       <div className="sae-list">
         {saes.length === 0 && !erreur ? (
@@ -94,9 +96,9 @@ function App() {
           saes.map((sae) => (
             <div key={sae.id} className="sae-card">
               <h3>{sae.titre}</h3>
-              <p><strong>Description:</strong> {sae.description}</p>
-              <p><strong>Semestre:</strong> {sae.semestre}</p>
-              <p><strong>État:</strong> {sae.etat}</p>
+              <p><strong>Description :</strong> {sae.description}</p>
+              <p><strong>Semestre :</strong> {sae.semestre}</p>
+              <p><strong>État :</strong> {sae.etat}</p>
             </div>
           ))
         )}

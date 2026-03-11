@@ -1,61 +1,171 @@
-/* frontend/src/App.css */
+/* Importation d'une police moderne et épurée (Inter) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
 :root {
-  --bg-color: #f4f7f6;
-  --text-color: #333;
-  --primary-color: #2c3e50;
-  --card-bg: #ffffff;
-  --accent-color: #3498db;
+  --bg-body: #f3f4f6;       /* Gris très clair pour le fond */
+  --bg-card: #ffffff;       /* Blanc pur pour les cartes */
+  --text-main: #1f2937;     /* Gris très foncé (presque noir) */
+  --text-muted: #6b7280;    /* Gris moyen pour les textes secondaires */
+  --primary: #4f46e5;       /* Indigo moderne */
+  --primary-hover: #4338ca;
+  --danger: #ef4444;        /* Rouge doux pour la déconnexion */
+  --danger-hover: #dc2626;
+  --border: #e5e7eb;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  background-color: var(--bg-color);
-  color: var(--text-color);
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-body);
+  color: var(--text-main);
+  line-height: 1.5;
 }
 
+/* --- VUE CONNEXION --- */
+.login-wrapper {
+  background: var(--bg-card);
+  max-width: 400px;
+  margin: 5rem auto;
+  padding: 2.5rem;
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  text-align: center;
+}
+
+.login-wrapper h1 {
+  color: var(--primary);
+  margin-bottom: 1.5rem;
+  font-size: 1.5rem;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+input {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+}
+
+/* --- VUE TABLEAU DE BORD --- */
 .dashboard-container {
   max-width: 1200px;
   margin: 0 auto;
   padding: 2rem;
 }
 
-h1 {
-  color: var(--primary-color);
-  text-align: center;
-  border-bottom: 2px solid var(--accent-color);
-  padding-bottom: 10px;
+.header-dashboard {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 1.5rem;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 2rem;
+}
+
+.header-dashboard h1 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 1.8rem;
+  letter-spacing: -0.025em;
 }
 
 h2 {
-  color: var(--accent-color);
-  margin-top: 1.5rem;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  font-weight: 500;
+  margin-bottom: 1.5rem;
 }
 
-/* Grille pour les SAE */
+/* Boutons */
+button {
+  font-family: 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background-color: var(--primary);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover {
+  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.btn-logout {
+  background-color: var(--danger);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-logout:hover {
+  background-color: var(--danger-hover);
+  transform: translateY(-1px);
+}
+
+/* Grille et Cartes SAE */
 .sae-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 1.5rem;
-  margin-top: 2rem;
 }
 
-/* Design des cartes */
 .sae-card {
-  background-color: var(--card-bg);
-  border-radius: 8px;
+  background: var(--bg-card);
+  border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow-md);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
-  border-left: 5px solid var(--accent-color);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--primary);
 }
 
 .sae-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
 }
 
 .sae-card h3 {
   margin-top: 0;
-  color: var(--primary-color);
+  color: var(--text-main);
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.sae-card p {
+  margin: 0.5rem 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.sae-card strong {
+  color: var(--text-main);
+  font-weight: 600;
 }
