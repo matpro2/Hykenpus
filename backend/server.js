@@ -21,5 +21,5 @@ app.get('/api/sae', (req, res) => {
 
 // Lancement du serveur
 app.listen(PORT, () => {
-  console.log(`Serveur Back-end démarré sur http://localhost:${PORT}`);
+  console.log(`Serveur Back-end démarré sur http://localhost:${PORT}/api/sae`);
 });
