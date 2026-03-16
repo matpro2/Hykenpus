@@ -3,6 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 
+// IMPORTATION DES DONNÉES DEPUIS LE FICHIER EXTERNE
+const saeList = require('./data/saes.json');
+
 const app = express();
 const PORT = 8000;
 const SECRET_KEY = "ma_cle_secrete_pour_la_sae"; 
@@ -10,14 +13,7 @@ const SECRET_KEY = "ma_cle_secrete_pour_la_sae";
 app.use(cors());
 app.use(express.json());
 
-// Données enrichies avec images, années et travaux pour le mode public
-const saeList = [
-  { id: 1, titre: "SAE 3.01", description: "Conception d'un service", semestre: "S3", etat: "rendue", annee: 2025, image: "https://picsum.photos/seed/sae1/600/300", travaux: "Maquette interactive Figma" },
-  { id: 2, titre: "SAE 4.01", description: "Plateforme interne", semestre: "S4", etat: "en cours", annee: 2026, image: "https://picsum.photos/seed/sae2/600/300", travaux: "Code source React & Node.js" },
-  { id: 3, titre: "SAE 1.01", description: "Site web statique", semestre: "S1", etat: "rendue", annee: 2025, image: "https://picsum.photos/seed/sae3/600/300", travaux: "Portfolio HTML/CSS" }
-];
-
-// NOUVEAU : Endpoint public (SANS vérification de token)
+// Endpoint public (SANS vérification de token)
 app.get('/api/public/sae', (req, res) => {
   res.json(saeList);
 });
