@@ -1,46 +1,46 @@
 // backend/server.js
 const express = require('express');
 const cors = require('cors');
-const jwt = require('jsonwebtoken'); // Import de la librairie JWT
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const PORT = 8000;
-const SECRET_KEY = "ma_cle_secrete_pour_la_sae"; // Clé pour signer le token
+const SECRET_KEY = "ma_cle_secrete_pour_la_sae"; 
 
 app.use(cors());
 app.use(express.json());
 
-// Données fictives autorisées par le cahier des charges
+// Données enrichies avec images, années et travaux pour le mode public
 const saeList = [
-  { id: 1, titre: "SAE 3.01", description: "Conception d'un service", semestre: "S3", etat: "rendue" },
-  { id: 2, titre: "SAE 4.01", description: "Plateforme interne", semestre: "S4", etat: "en cours" }
+  { id: 1, titre: "SAE 3.01", description: "Conception d'un service", semestre: "S3", etat: "rendue", annee: 2025, image: "https://picsum.photos/seed/sae1/600/300", travaux: "Maquette interactive Figma" },
+  { id: 2, titre: "SAE 4.01", description: "Plateforme interne", semestre: "S4", etat: "en cours", annee: 2026, image: "https://picsum.photos/seed/sae2/600/300", travaux: "Code source React & Node.js" },
+  { id: 3, titre: "SAE 1.01", description: "Site web statique", semestre: "S1", etat: "rendue", annee: 2025, image: "https://picsum.photos/seed/sae3/600/300", travaux: "Portfolio HTML/CSS" }
 ];
 
-// 1. Endpoint d'authentification (Login)
-// 1. Endpoint d'authentification (Login)
+// NOUVEAU : Endpoint public (SANS vérification de token)
+app.get('/api/public/sae', (req, res) => {
+  res.json(saeList);
+});
+
+// Endpoint d'authentification (Login)
 app.post('/api/login', (req, res) => {
   const { username, password } = req.body;
 
-  // Compte Étudiant
   if (username === "etudiant" && password === "mmi2026") {
     const token = jwt.sign({ username, role: "etudiant" }, SECRET_KEY, { expiresIn: '2h' });
-    // On renvoie le token ET le rôle pour faciliter la vie du Front-end
     return res.json({ token: token, role: "etudiant" });
   } 
-  // Compte Enseignant
   else if (username === "enseignant" && password === "prof2026") {
     const token = jwt.sign({ username, role: "enseignant" }, SECRET_KEY, { expiresIn: '2h' });
     return res.json({ token: token, role: "enseignant" });
   } 
   
-  // Si rien ne correspond
   res.status(401).json({ message: "Identifiants incorrects" });
 });
 
-// 2. Middleware pour vérifier le Token sur les routes protégées
+// Middleware pour vérifier le Token sur les routes protégées
 const verifierToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  // On récupère le token après le mot "Bearer "
   const token = authHeader && authHeader.split(' ')[1];
 
   if (!token) return res.status(401).json({ message: "Accès refusé, token manquant" });
@@ -48,11 +48,11 @@ const verifierToken = (req, res, next) => {
   jwt.verify(token, SECRET_KEY, (err, user) => {
     if (err) return res.status(403).json({ message: "Token invalide" });
     req.user = user;
-    next(); // Le token est bon, on passe à la suite
+    next(); 
   });
 };
 
-// 3. Endpoint protégé (Liste des SAE)
+// Endpoint protégé (Liste des SAE pour le tableau de bord)
 app.get('/api/sae', verifierToken, (req, res) => {
   res.json(saeList);
 });

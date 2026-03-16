@@ -1,10 +1,16 @@
-// frontend/src/services/saeService.js
+// frontend/src/services/saeServices.js
 
-// ATTENTION: Pense à remettre l'URL de ton Codespaces (port 8000)
+// L'URL de ton Codespaces
 const API_BASE_URL = 'https://didactic-fortnight-r47xp459jq9535477-8000.app.github.dev/api'; 
 
 export const saeService = {
-  // Fonction pour se connecter
+  // NOUVEAU : Fonction publique (sans token)
+  getPublicListeSae: async () => {
+    const response = await fetch(`${API_BASE_URL}/public/sae`);
+    if (!response.ok) throw new Error("Erreur de chargement public");
+    return await response.json();
+  },
+
   login: async (username, password) => {
     const response = await fetch(`${API_BASE_URL}/login`, {
       method: 'POST',
@@ -13,19 +19,15 @@ export const saeService = {
     });
 
     if (!response.ok) throw new Error("Échec de la connexion");
-    return await response.json(); // Retourne { token: "..." }
+    return await response.json(); 
   },
 
-  // Fonction pour récupérer les SAE (nécessite le token)
   getListeSae: async (token) => {
     const options = {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json'
-      }
+      headers: { 'Content-Type': 'application/json' }
     };
 
-    // Ajout du Token dans les headers si présent
     if (token) {
       options.headers['Authorization'] = `Bearer ${token}`;
     }
