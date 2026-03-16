@@ -84,11 +84,30 @@ function App() {
     return (
       <div className="login-wrapper">
         <h1>Connexion</h1>
+
+        {/* --- NOUVEAU : Boutons de remplissage rapide pour la démo --- */}
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem', justifyContent: 'center' }}>
+          <button 
+            type="button" 
+            onClick={() => { setUsername('etudiant'); setPassword('mmi2026'); }} 
+            style={{ background: '#e0e7ff', color: 'var(--primary)', border: 'none', padding: '0.5rem 1rem', borderRadius: '5px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
+          >
+            👨‍🎓 Étudiant
+          </button>
+          <button 
+            type="button" 
+            onClick={() => { setUsername('enseignant'); setPassword('prof2026'); }} 
+            style={{ background: '#e0e7ff', color: 'var(--primary)', border: 'none', padding: '0.5rem 1rem', borderRadius: '5px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}
+          >
+            👨‍🏫 Enseignant
+          </button>
+        </div>
+
         <form onSubmit={handleLogin}>
           {erreur && <p style={{ color: 'var(--danger)', fontWeight: '500' }}>{erreur}</p>}
           <input 
             type="text" 
-            placeholder="Identifiant (etudiant ou enseignant)" 
+            placeholder="Identifiant" 
             value={username} 
             onChange={(e) => setUsername(e.target.value)} 
             required 
@@ -102,8 +121,13 @@ function App() {
           />
           <button type="submit" className="btn-primary">Valider</button>
         </form>
-        <button onClick={() => setVueActuelle('public')} style={{ background: 'none', color: 'var(--text-muted)', marginTop: '1rem', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
-          Retour à l'accueil
+
+        {/* Le raccourci Public agit comme un bouton retour */}
+        <button 
+          onClick={() => setVueActuelle('public')} 
+          style={{ background: 'none', color: 'var(--text-muted)', marginTop: '1.5rem', border: 'none', cursor: 'pointer', textDecoration: 'underline', width: '100%' }}
+        >
+          👁️ Retour à la vue Public
         </button>
       </div>
     );
