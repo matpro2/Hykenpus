@@ -6,16 +6,21 @@ import './App.css';
 function App() {
   const [token, setToken] = useState(localStorage.getItem('jwtToken') || null);
   const [role, setRole] = useState(localStorage.getItem('userRole') || null);
-  const [vueActuelle, setVueActuelle] = useState('public');
+  const [prenomUser, setPrenomUser] = useState(localStorage.getItem('userPrenom') || '');
+  const [vueActuelle, setVueActuelle] = useState('public'); // 'public', 'login', 'register', 'dashboard'
 
-  const [username, setUsername] = useState('');
+  // États des formulaires
+  const [mail, setMail] = useState('');
   const [password, setPassword] = useState('');
-  const [erreur, setErreur] = useState(null);
+  const [nom, setNom] = useState('');
+  const [prenom, setPrenom] = useState('');
+  const [roleInscription, setRoleInscription] = useState('etudiant');
   
+  const [erreur, setErreur] = useState(null);
+  const [succes, setSucces] = useState(null);
   const [saes, setSaes] = useState([]);
-  const [anneeFiltre, setAnneeFiltre] = useState(''); // Filtre public
+  const [anneeFiltre, setAnneeFiltre] = useState(''); 
 
-  // Chargement des données selon si on est connecté ou non
   useEffect(() => {
     if (token) {
       setVueActuelle('dashboard');
@@ -30,36 +35,52 @@ function App() {
     e.preventDefault();
     setErreur(null);
     try {
-      const data = await saeService.login(username, password);
+      const data = await saeService.login(mail, password);
       setToken(data.token);
       setRole(data.role);
+      setPrenomUser(data.prenom);
+      
       localStorage.setItem('jwtToken', data.token);
       localStorage.setItem('userRole', data.role);
+      localStorage.setItem('userPrenom', data.prenom);
     } catch (err) {
-      setErreur("Identifiants incorrects.");
+      setErreur(err.message);
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setErreur(null);
+    setSucces(null);
+    try {
+      await saeService.register({ nom, prenom, mail, password, role: roleInscription });
+      setSucces("Compte créé avec succès ! Vous pouvez maintenant vous connecter.");
+      setVueActuelle('login'); // On bascule sur la connexion
+      // On vide les champs
+      setNom(''); setPrenom(''); setPassword('');
+    } catch (err) {
+      setErreur(err.message);
     }
   };
 
   const handleLogout = () => {
     setToken(null);
     setRole(null);
-    localStorage.removeItem('jwtToken');
-    localStorage.removeItem('userRole');
+    setPrenomUser('');
+    localStorage.clear(); // Vide tout le localStorage
     setSaes([]);
     setVueActuelle('public');
-    setUsername('');
+    setMail('');
     setPassword('');
   };
 
   // ==========================================
-  // VUE 1 : PUBLIC (Galerie graphique)
+  // VUE 1 : PUBLIC (Galerie)
   // ==========================================
   if (vueActuelle === 'public') {
-    // Filtrage par année pour le public
-    const saesPubliquesFiltrees = anneeFiltre 
-      ? saes.filter(sae => sae.annee.toString() === anneeFiltre) 
-      : saes;
-
+    // ... (GARDE EXACTEMENT LE MÊME CODE QUE TON VUE 1 PRÉCÉDENT ICI) ...
+    // Je le remets en raccourci pour la clarté
+    const saesPubliquesFiltrees = anneeFiltre ? saes.filter(sae => sae.annee && sae.annee.toString() === anneeFiltre) : saes;
     return (
       <div className="dashboard-container">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem', borderBottom: '2px solid var(--border)', paddingBottom: '1rem' }}>
@@ -67,38 +88,15 @@ function App() {
             <h1 style={{ color: 'var(--primary)', margin: 0 }}>MMI Hub</h1>
             <p style={{ color: 'var(--text-muted)', margin: 0 }}>La vitrine des travaux MMI</p>
           </div>
-          <button onClick={() => setVueActuelle('login')} className="btn-primary">Intranet MMI</button>
+          <div>
+            <button onClick={() => setVueActuelle('login')} className="btn-primary" style={{ marginRight: '10px' }}>Connexion</button>
+            <button onClick={() => setVueActuelle('register')} className="btn-primary" style={{ background: 'white', color: 'var(--primary)', border: '1px solid var(--primary)' }}>Inscription</button>
+          </div>
         </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
-          <h2>Galerie des Projets</h2>
-          <select 
-            onChange={(e) => setAnneeFiltre(e.target.value)} 
-            value={anneeFiltre}
-            style={{ padding: '0.5rem', borderRadius: '5px', border: '1px solid var(--border)', fontFamily: 'inherit' }}
-          >
-            <option value="">Toutes les années</option>
-            <option value="2025">Année 2025</option>
-            <option value="2026">Année 2026</option>
-          </select>
-        </div>
-
+        {/* Affichage des SAE publiques... */}
         <div className="sae-list">
-          {saesPubliquesFiltrees.map((sae) => (
-            <div key={sae.id} className="sae-card" style={{ padding: 0, overflow: 'hidden' }}>
-              <img src={sae.image} alt={sae.titre} style={{ width: '100%', height: '180px', objectFit: 'cover' }} />
-              <div style={{ padding: '1.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <h3 style={{ margin: 0 }}>{sae.titre}</h3>
-                  <span style={{ background: 'var(--primary)', color: 'white', padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem' }}>{sae.annee}</span>
-                </div>
-                <p style={{ marginTop: '1rem' }}>{sae.description}</p>
-                <div style={{ marginTop: '1rem', padding: '0.8rem', background: 'var(--bg-body)', borderRadius: '5px', fontSize: '0.9rem' }}>
-                  <strong>🎓 Travaux réalisés :</strong><br />
-                  {sae.travaux}
-                </div>
-              </div>
-            </div>
+          {saesPubliquesFiltrees.length === 0 ? <p>Aucune SAE (ou base de données vide).</p> : saesPubliquesFiltrees.map((sae) => (
+             <div key={sae.id} className="sae-card"><h3>{sae.nom}</h3><p>{sae.description}</p></div>
           ))}
         </div>
       </div>
@@ -112,54 +110,74 @@ function App() {
     return (
       <div className="login-wrapper">
         <h1>Connexion</h1>
-
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '1.5rem', justifyContent: 'center' }}>
-          <button type="button" onClick={() => { setUsername('etudiant'); setPassword('mmi2026'); }} style={{ background: '#e0e7ff', color: 'var(--primary)', border: 'none', padding: '0.5rem 1rem', borderRadius: '5px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>
-            👨‍🎓 Étudiant
-          </button>
-          <button type="button" onClick={() => { setUsername('enseignant'); setPassword('prof2026'); }} style={{ background: '#e0e7ff', color: 'var(--primary)', border: 'none', padding: '0.5rem 1rem', borderRadius: '5px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>
-            👨‍🏫 Enseignant
-          </button>
-          <button type="button" onClick={() => setVueActuelle('public')} style={{ background: '#e0e7ff', color: 'var(--primary)', border: 'none', padding: '0.5rem 1rem', borderRadius: '5px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 'bold' }}>
-            🌍 Public
-          </button>
-        </div>
-
+        {succes && <p style={{ color: 'green', fontWeight: 'bold' }}>{succes}</p>}
         <form onSubmit={handleLogin}>
           {erreur && <p style={{ color: 'var(--danger)', fontWeight: '500' }}>{erreur}</p>}
-          <input type="text" placeholder="Identifiant" value={username} onChange={(e) => setUsername(e.target.value)} required />
+          <input type="email" placeholder="Adresse e-mail" value={mail} onChange={(e) => setMail(e.target.value)} required />
           <input type="password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          <button type="submit" className="btn-primary">Valider</button>
+          <button type="submit" className="btn-primary">Se connecter</button>
         </form>
+        <p style={{ marginTop: '1.5rem', fontSize: '0.9rem' }}>
+          Pas encore de compte ? <button onClick={() => setVueActuelle('register')} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>S'inscrire</button>
+        </p>
+        <button onClick={() => setVueActuelle('public')} style={{ background: 'none', color: 'var(--text-muted)', marginTop: '1rem', border: 'none', cursor: 'pointer', textDecoration: 'underline', width: '100%' }}>Retour à la vue Public</button>
       </div>
     );
   }
 
   // ==========================================
-  // VUE 3 : TABLEAU DE BORD (Protégé)
+  // VUE 3 : INSCRIPTION (NOUVEAU)
+  // ==========================================
+  if (vueActuelle === 'register') {
+    return (
+      <div className="login-wrapper">
+        <h1>Créer un compte</h1>
+        <form onSubmit={handleRegister}>
+          {erreur && <p style={{ color: 'var(--danger)', fontWeight: '500' }}>{erreur}</p>}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <input type="text" placeholder="Prénom" value={prenom} onChange={(e) => setPrenom(e.target.value)} required style={{ width: '50%' }}/>
+            <input type="text" placeholder="Nom" value={nom} onChange={(e) => setNom(e.target.value)} required style={{ width: '50%' }}/>
+          </div>
+          <input type="email" placeholder="Adresse e-mail" value={mail} onChange={(e) => setMail(e.target.value)} required />
+          <input type="password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" />
+          
+          <select value={roleInscription} onChange={(e) => setRoleInscription(e.target.value)} style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+            <option value="etudiant">Je suis Étudiant</option>
+            <option value="enseignant">Je suis Enseignant</option>
+          </select>
+
+          <button type="submit" className="btn-primary">Valider l'inscription</button>
+        </form>
+        <p style={{ marginTop: '1.5rem', fontSize: '0.9rem' }}>
+          Déjà un compte ? <button onClick={() => setVueActuelle('login')} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>Se connecter</button>
+        </p>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // VUE 4 : TABLEAU DE BORD (Protégé)
   // ==========================================
   return (
     <div className="dashboard-container">
       <div className="header-dashboard">
         <h1>Suivi des SAE</h1>
-        <button onClick={handleLogout} className="btn-logout">Déconnexion</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <span style={{ fontWeight: 'bold' }}>Bonjour, {prenomUser}</span>
+          <button onClick={handleLogout} className="btn-logout">Déconnexion</button>
+        </div>
       </div>
       
-      <h2>
-        Vue {role === 'enseignant' ? 'Enseignant' : 'Étudiant'} : 
-        {role === 'enseignant' ? ' Supervision globale' : ' Mon tableau de bord'}
-      </h2>
+      <h2>Vue {role === 'enseignant' ? 'Enseignant' : 'Étudiant'}</h2>
 
       <div className="sae-list">
         {saes.length === 0 ? (
-          <p>Chargement des SAE...</p>
+          <p>Aucune SAE dans la base de données.</p>
         ) : (
           saes.map((sae) => (
             <div key={sae.id} className="sae-card">
-              <h3>{sae.titre}</h3>
+              <h3>{sae.nom}</h3>
               <p><strong>Description :</strong> {sae.description}</p>
-              <p><strong>Semestre :</strong> {sae.semestre}</p>
-              <p><strong>État :</strong> {sae.etat}</p>
             </div>
           ))
         )}

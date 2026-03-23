@@ -17,5 +17,9 @@
   "bugs": {
     "url": "https://github.com/matpro2/Hykenpus/issues"
   },
-  "homepage": "https://github.com/matpro2/Hykenpus#readme"
+  "homepage": "https://github.com/matpro2/Hykenpus#readme",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "mysql2": "^3.20.0"
+  }
 }
