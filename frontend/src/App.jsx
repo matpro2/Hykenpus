@@ -52,12 +52,32 @@ function App() {
     e.preventDefault();
     setErreur(null);
     setSucces(null);
+    
     try {
+      // 1. On crée le compte dans la base de données
       await saeService.register({ nom, prenom, mail, password, role: roleInscription });
-      setSucces("Compte créé avec succès ! Vous pouvez maintenant vous connecter.");
-      setVueActuelle('login'); // On bascule sur la connexion
-      // On vide les champs
-      setNom(''); setPrenom(''); setPassword('');
+
+      // 2. NOUVEAU : On le connecte automatiquement dans la foulée !
+      const data = await saeService.login(mail, password);
+      
+      // 3. On sauvegarde ses accès (comme s'il avait cliqué sur "Se connecter")
+      setToken(data.token);
+      setRole(data.role);
+      setPrenomUser(data.prenom);
+      
+      localStorage.setItem('jwtToken', data.token);
+      localStorage.setItem('userRole', data.role);
+      localStorage.setItem('userPrenom', data.prenom);
+
+      // 4. On vide les champs par sécurité
+      setNom(''); 
+      setPrenom(''); 
+      setPassword('');
+      
+      // Note : On n'a plus besoin de faire setVueActuelle('login') ici, 
+      // car le fait de changer le 'token' va automatiquement déclencher le useEffect 
+      // qui basculera la page sur le 'dashboard' !
+
     } catch (err) {
       setErreur(err.message);
     }
