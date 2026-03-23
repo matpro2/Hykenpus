@@ -15,7 +15,7 @@ app.use(express.json());
 // --- CONFIGURATION DE LA BASE DE DONNÉES ---
 const dbConfig = {
     host: 'servd162214.srv.odns.fr',
-    user: 'mathieu_Admin',
+    user: 'mathieuprosper_Admin',
     password: '1*O=?S5ruR%;',
     database: 'mathieuprosper_Hykenpus'
 };
