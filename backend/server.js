@@ -14,10 +14,10 @@ app.use(express.json());
 
 // --- CONFIGURATION DE LA BASE DE DONNÉES ---
 const dbConfig = {
-    host: 'localhost',     // Ou l'adresse de ton serveur MySQL
-    user: 'root',          // Utilisateur par défaut
-    password: '',          // Mot de passe par défaut (souvent vide sous XAMPP)
-    database: 'mmi_hub'    // LE NOM DE TA BASE DE DONNÉES
+    host: 'localhost',
+    user: 'mathieu_Admin',
+    password: '1*O=?S5ruR%;',
+    database: 'mathieuprosper_Hykenpus'
 };
 
 // --- ROUTES PUBLIQUES ---
