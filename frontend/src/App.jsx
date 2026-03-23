@@ -7,14 +7,19 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('jwtToken') || null);
   const [role, setRole] = useState(localStorage.getItem('userRole') || null);
   const [prenomUser, setPrenomUser] = useState(localStorage.getItem('userPrenom') || '');
-  const [vueActuelle, setVueActuelle] = useState('public'); // 'public', 'login', 'register', 'dashboard'
+  const [vueActuelle, setVueActuelle] = useState('public'); // 'public', 'login', 'register', 'dashboard', 'create-sae'
 
-  // États des formulaires
+  // États des formulaires (Connexion/Inscription)
   const [mail, setMail] = useState('');
   const [password, setPassword] = useState('');
   const [nom, setNom] = useState('');
   const [prenom, setPrenom] = useState('');
   const [roleInscription, setRoleInscription] = useState('etudiant');
+
+  // NOUVEAU : États du formulaire de création de SAE
+  const [nomSae, setNomSae] = useState('');
+  const [descriptionSae, setDescriptionSae] = useState('');
+  const [documentsSae, setDocumentsSae] = useState('');
   
   const [erreur, setErreur] = useState(null);
   const [succes, setSucces] = useState(null);
@@ -54,13 +59,9 @@ function App() {
     setSucces(null);
     
     try {
-      // 1. On crée le compte dans la base de données
       await saeService.register({ nom, prenom, mail, password, role: roleInscription });
-
-      // 2. NOUVEAU : On le connecte automatiquement dans la foulée !
       const data = await saeService.login(mail, password);
       
-      // 3. On sauvegarde ses accès (comme s'il avait cliqué sur "Se connecter")
       setToken(data.token);
       setRole(data.role);
       setPrenomUser(data.prenom);
@@ -69,15 +70,28 @@ function App() {
       localStorage.setItem('userRole', data.role);
       localStorage.setItem('userPrenom', data.prenom);
 
-      // 4. On vide les champs par sécurité
       setNom(''); 
       setPrenom(''); 
       setPassword('');
-      
-      // Note : On n'a plus besoin de faire setVueActuelle('login') ici, 
-      // car le fait de changer le 'token' va automatiquement déclencher le useEffect 
-      // qui basculera la page sur le 'dashboard' !
+    } catch (err) {
+      setErreur(err.message);
+    }
+  };
 
+  // NOUVEAU : Fonction pour créer la SAE
+  const handleCreateSae = async (e) => {
+    e.preventDefault();
+    setErreur(null);
+    try {
+      await saeService.createSae({ nom: nomSae, description: descriptionSae, documents: documentsSae }, token);
+      
+      // On recharge la liste des SAE pour voir la nouvelle
+      const donnees = await saeService.getListeSae(token);
+      setSaes(donnees);
+      
+      // On vide le formulaire et on retourne au dashboard
+      setNomSae(''); setDescriptionSae(''); setDocumentsSae('');
+      setVueActuelle('dashboard');
     } catch (err) {
       setErreur(err.message);
     }
@@ -87,7 +101,7 @@ function App() {
     setToken(null);
     setRole(null);
     setPrenomUser('');
-    localStorage.clear(); // Vide tout le localStorage
+    localStorage.clear();
     setSaes([]);
     setVueActuelle('public');
     setMail('');
@@ -98,8 +112,6 @@ function App() {
   // VUE 1 : PUBLIC (Galerie)
   // ==========================================
   if (vueActuelle === 'public') {
-    // ... (GARDE EXACTEMENT LE MÊME CODE QUE TON VUE 1 PRÉCÉDENT ICI) ...
-    // Je le remets en raccourci pour la clarté
     const saesPubliquesFiltrees = anneeFiltre ? saes.filter(sae => sae.annee && sae.annee.toString() === anneeFiltre) : saes;
     return (
       <div className="dashboard-container">
@@ -113,7 +125,6 @@ function App() {
             <button onClick={() => setVueActuelle('register')} className="btn-primary" style={{ background: 'white', color: 'var(--primary)', border: '1px solid var(--primary)' }}>Inscription</button>
           </div>
         </div>
-        {/* Affichage des SAE publiques... */}
         <div className="sae-list">
           {saesPubliquesFiltrees.length === 0 ? <p>Aucune SAE (ou base de données vide).</p> : saesPubliquesFiltrees.map((sae) => (
              <div key={sae.id} className="sae-card"><h3>{sae.nom}</h3><p>{sae.description}</p></div>
@@ -146,7 +157,7 @@ function App() {
   }
 
   // ==========================================
-  // VUE 3 : INSCRIPTION (NOUVEAU)
+  // VUE 3 : INSCRIPTION
   // ==========================================
   if (vueActuelle === 'register') {
     return (
@@ -176,7 +187,29 @@ function App() {
   }
 
   // ==========================================
-  // VUE 4 : TABLEAU DE BORD (Protégé)
+  // VUE 4 : CRÉATION DE SAE (Réservé Enseignant)
+  // ==========================================
+  if (vueActuelle === 'create-sae') {
+    return (
+      <div className="login-wrapper" style={{ maxWidth: '600px' }}>
+        <h1>Créer une nouvelle SAE</h1>
+        <form onSubmit={handleCreateSae}>
+          {erreur && <p style={{ color: 'var(--danger)' }}>{erreur}</p>}
+          <input type="text" placeholder="Nom de la SAE (ex: SAE 3.01)" value={nomSae} onChange={(e) => setNomSae(e.target.value)} required />
+          <textarea placeholder="Description détaillée de la SAE" value={descriptionSae} onChange={(e) => setDescriptionSae(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '1rem', minHeight: '100px', fontFamily: 'inherit' }} />
+          <input type="text" placeholder="Lien vers les documents (optionnel)" value={documentsSae} onChange={(e) => setDocumentsSae(e.target.value)} />
+          
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button type="submit" className="btn-primary" style={{ flex: 1 }}>Publier la SAE</button>
+            <button type="button" onClick={() => setVueActuelle('dashboard')} className="btn-primary" style={{ background: 'white', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Annuler</button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // VUE 5 : TABLEAU DE BORD (Protégé)
   // ==========================================
   return (
     <div className="dashboard-container">
@@ -188,7 +221,20 @@ function App() {
         </div>
       </div>
       
-      <h2>Vue {role === 'enseignant' ? 'Enseignant' : 'Étudiant'}</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
+        <h2>Vue {role === 'enseignant' ? 'Enseignant' : 'Étudiant'}</h2>
+        
+        {/* NOUVEAU : Bouton visible UNIQUEMENT pour l'enseignant */}
+        {role === 'enseignant' && (
+          <button 
+            onClick={() => setVueActuelle('create-sae')} 
+            className="btn-primary" 
+            style={{ background: '#10b981', borderColor: '#10b981', margin: 0 }}
+          >
+            ➕ Créer une nouvelle SAE
+          </button>
+        )}
+      </div>
 
       <div className="sae-list">
         {saes.length === 0 ? (

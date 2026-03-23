@@ -26,7 +26,6 @@ const dbConfig = {
 app.get('/api/public/sae', async (req, res) => {
     try {
         const connection = await mysql.createConnection(dbConfig);
-        // On récupère les SAE avec le nom et prénom de l'auteur grâce à une jointure (JOIN)
         const [rows] = await connection.execute(`
             SELECT SAE.*, Comptes.nom AS auteur_nom, Comptes.prenom AS auteur_prenom 
             FROM SAE 
@@ -49,17 +48,14 @@ app.post('/api/register', async (req, res) => {
     try {
         const connection = await mysql.createConnection(dbConfig);
         
-        // On vérifie si l'email existe déjà
         const [existingUsers] = await connection.execute('SELECT * FROM Comptes WHERE mail = ?', [mail]);
         if (existingUsers.length > 0) {
             await connection.end();
             return res.status(400).json({ message: "Cet email est déjà utilisé" });
         }
 
-        // On crypte le mot de passe avant de le sauvegarder
         const hashedPassword = await bcrypt.hash(password, 10);
 
-        // On insère le nouvel utilisateur
         await connection.execute(
             'INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role) VALUES (?, ?, ?, ?, ?)',
             [nom, prenom, mail, hashedPassword, role || 'etudiant']
@@ -75,12 +71,11 @@ app.post('/api/register', async (req, res) => {
 
 // 3. Connexion (Login)
 app.post('/api/login', async (req, res) => {
-    const { mail, password } = req.body; // On utilise le mail maintenant
+    const { mail, password } = req.body;
 
     try {
         const connection = await mysql.createConnection(dbConfig);
         
-        // On cherche l'utilisateur par son mail
         const [users] = await connection.execute('SELECT * FROM Comptes WHERE mail = ?', [mail]);
         await connection.end();
 
@@ -90,14 +85,12 @@ app.post('/api/login', async (req, res) => {
 
         const user = users[0];
 
-        // On compare le mot de passe tapé avec le mot de passe crypté en base
         const isValidPassword = await bcrypt.compare(password, user.mot_de_passe);
         
         if (!isValidPassword) {
             return res.status(401).json({ message: "Identifiants incorrects" });
         }
 
-        // Si tout est bon, on génère le Token !
         const token = jwt.sign({ id: user.id, mail: user.mail, role: user.role }, SECRET_KEY, { expiresIn: '2h' });
         
         res.json({ 
@@ -138,6 +131,30 @@ app.get('/api/sae', verifierToken, async (req, res) => {
         res.json(rows);
     } catch (error) {
         res.status(500).json({ message: "Erreur serveur" });
+    }
+});
+
+// 5. NOUVEAU : Création d'une nouvelle SAE (Réservé aux enseignants)
+app.post('/api/sae', verifierToken, async (req, res) => {
+    if (req.user.role !== 'enseignant') {
+        return res.status(403).json({ message: "Seuls les enseignants peuvent créer une SAE." });
+    }
+
+    const { nom, description, documents } = req.body;
+    const auteur_id = req.user.id; 
+    const date_creation = new Date().toISOString().split('T')[0]; 
+
+    try {
+        const connection = await mysql.createConnection(dbConfig);
+        await connection.execute(
+            'INSERT INTO SAE (nom, auteur_id, description, date_creation, documents) VALUES (?, ?, ?, ?, ?)',
+            [nom, auteur_id, description, date_creation, documents || '']
+        );
+        await connection.end();
+        res.status(201).json({ message: "SAE créée avec succès !" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Erreur lors de la création de la SAE" });
     }
 });
 

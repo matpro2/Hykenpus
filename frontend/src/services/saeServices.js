@@ -11,7 +11,7 @@ export const saeService = {
     return await response.json();
   },
 
-  login: async (mail, password) => { // Changé username en mail
+  login: async (mail, password) => { 
     const response = await fetch(`${API_BASE_URL}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -25,7 +25,6 @@ export const saeService = {
     return await response.json(); 
   },
 
-  // NOUVEAU : Inscription
   register: async (userData) => {
     const response = await fetch(`${API_BASE_URL}/register`, {
       method: 'POST',
@@ -36,6 +35,24 @@ export const saeService = {
     if (!response.ok) {
         const err = await response.json();
         throw new Error(err.message || "Échec de l'inscription");
+    }
+    return await response.json(); 
+  },
+
+  // NOUVEAU : Création d'une SAE
+  createSae: async (saeData, token) => {
+    const response = await fetch(`${API_BASE_URL}/sae`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}` 
+      },
+      body: JSON.stringify(saeData)
+    });
+
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || "Échec de la création");
     }
     return await response.json(); 
   },
