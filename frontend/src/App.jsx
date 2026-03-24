@@ -1,13 +1,13 @@
 // frontend/src/App.jsx
 import { useState, useEffect } from 'react';
-import { saeService } from './services/saeServices';
+import { saeService, SERVER_URL } from './services/saeServices';
 import './App.css';
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem('jwtToken') || null);
   const [role, setRole] = useState(localStorage.getItem('userRole') || null);
   const [prenomUser, setPrenomUser] = useState(localStorage.getItem('userPrenom') || '');
-  const [vueActuelle, setVueActuelle] = useState('public'); // 'public', 'login', 'register', 'dashboard', 'create-sae'
+  const [vueActuelle, setVueActuelle] = useState('public');
 
   // États des formulaires (Connexion/Inscription)
   const [mail, setMail] = useState('');
@@ -16,10 +16,10 @@ function App() {
   const [prenom, setPrenom] = useState('');
   const [roleInscription, setRoleInscription] = useState('etudiant');
 
-  // NOUVEAU : États du formulaire de création de SAE
+  // États du formulaire de création de SAE
   const [nomSae, setNomSae] = useState('');
   const [descriptionSae, setDescriptionSae] = useState('');
-  const [documentsSae, setDocumentsSae] = useState('');
+  const [fichiersSae, setFichiersSae] = useState([]); // Tableau de fichiers
   
   const [erreur, setErreur] = useState(null);
   const [succes, setSucces] = useState(null);
@@ -70,27 +70,32 @@ function App() {
       localStorage.setItem('userRole', data.role);
       localStorage.setItem('userPrenom', data.prenom);
 
-      setNom(''); 
-      setPrenom(''); 
-      setPassword('');
+      setNom(''); setPrenom(''); setPassword('');
     } catch (err) {
       setErreur(err.message);
     }
   };
 
-  // NOUVEAU : Fonction pour créer la SAE
   const handleCreateSae = async (e) => {
     e.preventDefault();
     setErreur(null);
     try {
-      await saeService.createSae({ nom: nomSae, description: descriptionSae, documents: documentsSae }, token);
+      // Création du paquet de données
+      const formData = new FormData();
+      formData.append('nom', nomSae);
+      formData.append('description', descriptionSae);
       
-      // On recharge la liste des SAE pour voir la nouvelle
+      // Ajout des fichiers au paquet
+      fichiersSae.forEach(fichier => {
+        formData.append('fichiers', fichier);
+      });
+
+      await saeService.createSae(formData, token);
+      
       const donnees = await saeService.getListeSae(token);
       setSaes(donnees);
       
-      // On vide le formulaire et on retourne au dashboard
-      setNomSae(''); setDescriptionSae(''); setDocumentsSae('');
+      setNomSae(''); setDescriptionSae(''); setFichiersSae([]);
       setVueActuelle('dashboard');
     } catch (err) {
       setErreur(err.message);
@@ -106,6 +111,35 @@ function App() {
     setVueActuelle('public');
     setMail('');
     setPassword('');
+  };
+
+  // Fonction pour afficher proprement les liens des fichiers joints
+  const renderFichiers = (documentsJson) => {
+    if (!documentsJson) return null;
+    try {
+      const fichiers = JSON.parse(documentsJson);
+      if (!Array.isArray(fichiers) || fichiers.length === 0) return null;
+      return (
+        <div style={{ marginTop: '1rem', padding: '10px', backgroundColor: '#f1f5f9', borderRadius: '5px' }}>
+          <strong style={{ display: 'block', marginBottom: '5px', fontSize: '0.9rem' }}>📎 Pièces jointes :</strong>
+          <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.9rem' }}>
+            {fichiers.map((fichier, index) => {
+               // Enlève le timestamp du nom pour faire plus propre
+               const nomAffiche = fichier.includes('-') ? fichier.split('-').slice(1).join('-') : fichier;
+               return (
+                 <li key={index} style={{ marginBottom: '5px' }}>
+                   <a href={`${SERVER_URL}/uploads/${fichier}`} target="_blank" rel="noreferrer" style={{ color: 'var(--primary)', textDecoration: 'none' }}>
+                     {nomAffiche}
+                   </a>
+                 </li>
+               );
+            })}
+          </ul>
+        </div>
+      );
+    } catch(e) {
+      return null;
+    }
   };
 
   // ==========================================
@@ -127,7 +161,11 @@ function App() {
         </div>
         <div className="sae-list">
           {saesPubliquesFiltrees.length === 0 ? <p>Aucune SAE (ou base de données vide).</p> : saesPubliquesFiltrees.map((sae) => (
-             <div key={sae.id} className="sae-card"><h3>{sae.nom}</h3><p>{sae.description}</p></div>
+             <div key={sae.id} className="sae-card">
+               <h3>{sae.nom}</h3>
+               <p>{sae.description}</p>
+               {renderFichiers(sae.documents)}
+             </div>
           ))}
         </div>
       </div>
@@ -187,7 +225,7 @@ function App() {
   }
 
   // ==========================================
-  // VUE 4 : CRÉATION DE SAE (Réservé Enseignant)
+  // VUE 4 : CRÉATION DE SAE
   // ==========================================
   if (vueActuelle === 'create-sae') {
     return (
@@ -197,7 +235,20 @@ function App() {
           {erreur && <p style={{ color: 'var(--danger)' }}>{erreur}</p>}
           <input type="text" placeholder="Nom de la SAE (ex: SAE 3.01)" value={nomSae} onChange={(e) => setNomSae(e.target.value)} required />
           <textarea placeholder="Description détaillée de la SAE" value={descriptionSae} onChange={(e) => setDescriptionSae(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '1rem', minHeight: '100px', fontFamily: 'inherit' }} />
-          <input type="text" placeholder="Lien vers les documents (optionnel)" value={documentsSae} onChange={(e) => setDocumentsSae(e.target.value)} />
+          
+          <div style={{ marginBottom: '1rem', padding: '1rem', border: '1px dashed var(--primary)', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
+            <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', color: 'var(--primary)' }}>Joindre des fichiers (PDF, Word, etc.) :</label>
+            <input 
+              type="file" 
+              multiple 
+              onChange={(e) => setFichiersSae(Array.from(e.target.files))} 
+            />
+            {fichiersSae.length > 0 && (
+              <ul style={{ marginTop: '10px', fontSize: '0.9rem', color: '#475569', paddingLeft: '20px' }}>
+                {fichiersSae.map((f, index) => <li key={index}>📄 {f.name}</li>)}
+              </ul>
+            )}
+          </div>
           
           <div style={{ display: 'flex', gap: '10px' }}>
             <button type="submit" className="btn-primary" style={{ flex: 1 }}>Publier la SAE</button>
@@ -224,7 +275,6 @@ function App() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <h2>Vue {role === 'enseignant' ? 'Enseignant' : 'Étudiant'}</h2>
         
-        {/* NOUVEAU : Bouton visible UNIQUEMENT pour l'enseignant */}
         {role === 'enseignant' && (
           <button 
             onClick={() => setVueActuelle('create-sae')} 
@@ -244,6 +294,7 @@ function App() {
             <div key={sae.id} className="sae-card">
               <h3>{sae.nom}</h3>
               <p><strong>Description :</strong> {sae.description}</p>
+              {renderFichiers(sae.documents)}
             </div>
           ))
         )}

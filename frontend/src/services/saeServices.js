@@ -1,7 +1,8 @@
 // frontend/src/services/saeServices.js
 
-// L'URL de ton Codespaces
-const API_BASE_URL = 'https://didactic-fortnight-r47xp459jq9535477-8000.app.github.dev/api'; 
+// L'URL de base pour les requêtes API
+export const SERVER_URL = 'https://didactic-fortnight-r47xp459jq9535477-8000.app.github.dev';
+const API_BASE_URL = `${SERVER_URL}/api`; 
 
 export const saeService = {
   
@@ -39,15 +40,14 @@ export const saeService = {
     return await response.json(); 
   },
 
-  // NOUVEAU : Création d'une SAE
-  createSae: async (saeData, token) => {
+  // MODIFIÉ : On reçoit un formData, on n'utilise plus Content-Type: application/json
+  createSae: async (formData, token) => {
     const response = await fetch(`${API_BASE_URL}/sae`, {
       method: 'POST',
       headers: { 
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}` 
       },
-      body: JSON.stringify(saeData)
+      body: formData 
     });
 
     if (!response.ok) {

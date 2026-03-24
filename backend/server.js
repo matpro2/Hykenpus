@@ -3,8 +3,11 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const sqlite3 = require('sqlite3'); // Le moteur local
-const { open } = require('sqlite'); // Pour utiliser async/await avec SQLite
+const sqlite3 = require('sqlite3'); 
+const { open } = require('sqlite'); 
+const multer = require('multer'); // NOUVEAU : Pour les fichiers
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const PORT = 8000;
@@ -13,17 +16,30 @@ const SECRET_KEY = "ma_cle_secrete_pour_la_sae";
 app.use(cors());
 app.use(express.json());
 
-let db; // Notre connexion à la base de données locale
+// --- CONFIGURATION DE MULTER (Upload de fichiers) ---
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir); // Crée le dossier s'il n'existe pas
+}
+app.use('/uploads', express.static(uploadDir)); // Rend le dossier public
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => cb(null, uploadDir),
+    filename: (req, file, cb) => {
+        cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, '_')); 
+    }
+});
+const upload = multer({ storage: storage });
+
+let db; 
 
 // --- INITIALISATION DE LA BASE DE DONNÉES LOCALE ---
 async function initDB() {
-    // 1. On crée ou on ouvre le fichier local
     db = await open({
         filename: './mmi_hub.sqlite', 
         driver: sqlite3.Database
     });
 
-    // 2. On crée les tables automatiquement si elles n'existent pas !
     await db.exec(`
         CREATE TABLE IF NOT EXISTS Comptes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,7 +60,7 @@ async function initDB() {
             FOREIGN KEY (auteur_id) REFERENCES Comptes(id) ON DELETE CASCADE
         );
     `);
-    console.log("✅ Base de données locale (SQLite) prête et opérationnelle !");
+    console.log("✅ Base de données locale et système de fichiers prêts !");
 }
 initDB();
 
@@ -133,19 +149,24 @@ app.get('/api/sae', verifierToken, async (req, res) => {
     }
 });
 
-app.post('/api/sae', verifierToken, async (req, res) => {
+// NOUVEAU : On utilise upload.array('fichiers') pour intercepter les documents
+app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, res) => {
     if (req.user.role !== 'enseignant') {
         return res.status(403).json({ message: "Seuls les enseignants peuvent créer une SAE." });
     }
 
-    const { nom, description, documents } = req.body;
+    const { nom, description } = req.body;
     const auteur_id = req.user.id; 
     const date_creation = new Date().toISOString().split('T')[0]; 
+
+    // On crée une liste des noms de fichiers sauvegardés
+    const fichiersNoms = req.files ? req.files.map(f => f.filename) : [];
+    const documentsStr = JSON.stringify(fichiersNoms); 
 
     try {
         await db.run(
             'INSERT INTO SAE (nom, auteur_id, description, date_creation, documents) VALUES (?, ?, ?, ?, ?)',
-            [nom, auteur_id, description, date_creation, documents || '']
+            [nom, auteur_id, description, date_creation, documentsStr]
         );
         res.status(201).json({ message: "SAE créée avec succès !" });
     } catch (error) {
@@ -155,5 +176,5 @@ app.post('/api/sae', verifierToken, async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Serveur démarré sur le port ${PORT}, en mode BASE DE DONNÉES LOCALE !`);
+    console.log(`Serveur démarré sur le port ${PORT}`);
 });
