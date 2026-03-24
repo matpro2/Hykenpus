@@ -3,7 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
-const mysql = require('mysql2/promise'); // Librairie MySQL
+const sqlite3 = require('sqlite3'); // Le moteur local
+const { open } = require('sqlite'); // Pour utiliser async/await avec SQLite
 
 const app = express();
 const PORT = 8000;
@@ -12,56 +13,72 @@ const SECRET_KEY = "ma_cle_secrete_pour_la_sae";
 app.use(cors());
 app.use(express.json());
 
-// --- CONFIGURATION DE LA BASE DE DONNÉES ---
-const dbConfig = {
-    host: 'servd162214.srv.odns.fr',
-    user: 'mathieuprosper_Admin1',
-    password: 'CH?dgNItbm*q',
-    database: 'mathieuprosper_Hykenpus'
-};
+let db; // Notre connexion à la base de données locale
+
+// --- INITIALISATION DE LA BASE DE DONNÉES LOCALE ---
+async function initDB() {
+    // 1. On crée ou on ouvre le fichier local
+    db = await open({
+        filename: './mmi_hub.sqlite', 
+        driver: sqlite3.Database
+    });
+
+    // 2. On crée les tables automatiquement si elles n'existent pas !
+    await db.exec(`
+        CREATE TABLE IF NOT EXISTS Comptes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom TEXT NOT NULL,
+            prenom TEXT NOT NULL,
+            mail TEXT UNIQUE NOT NULL,
+            mot_de_passe TEXT NOT NULL,
+            role TEXT NOT NULL
+        );
+        
+        CREATE TABLE IF NOT EXISTS SAE (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom TEXT NOT NULL,
+            auteur_id INTEGER NOT NULL,
+            description TEXT,
+            date_creation TEXT,
+            documents TEXT,
+            FOREIGN KEY (auteur_id) REFERENCES Comptes(id) ON DELETE CASCADE
+        );
+    `);
+    console.log("✅ Base de données locale (SQLite) prête et opérationnelle !");
+}
+initDB();
 
 // --- ROUTES PUBLIQUES ---
 
-// 1. Endpoint public (Galerie SAE) - Lit depuis la BDD
 app.get('/api/public/sae', async (req, res) => {
     try {
-        const connection = await mysql.createConnection(dbConfig);
-        const [rows] = await connection.execute(`
+        const rows = await db.all(`
             SELECT SAE.*, Comptes.nom AS auteur_nom, Comptes.prenom AS auteur_prenom 
             FROM SAE 
             JOIN Comptes ON SAE.auteur_id = Comptes.id
         `);
-        await connection.end();
         res.json(rows);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: "Erreur serveur lors de la récupération des données" });
+        res.status(500).json({ message: "Erreur serveur" });
     }
 });
 
 // --- AUTHENTIFICATION ---
 
-// 2. Inscription (Register)
 app.post('/api/register', async (req, res) => {
     const { nom, prenom, mail, password, role } = req.body;
-
     try {
-        const connection = await mysql.createConnection(dbConfig);
-        
-        const [existingUsers] = await connection.execute('SELECT * FROM Comptes WHERE mail = ?', [mail]);
+        const existingUsers = await db.all('SELECT * FROM Comptes WHERE mail = ?', [mail]);
         if (existingUsers.length > 0) {
-            await connection.end();
             return res.status(400).json({ message: "Cet email est déjà utilisé" });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
-
-        await connection.execute(
+        await db.run(
             'INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role) VALUES (?, ?, ?, ?, ?)',
             [nom, prenom, mail, hashedPassword, role || 'etudiant']
         );
-        
-        await connection.end();
         res.status(201).json({ message: "Compte créé avec succès !" });
     } catch (error) {
         console.error(error);
@@ -69,22 +86,15 @@ app.post('/api/register', async (req, res) => {
     }
 });
 
-// 3. Connexion (Login)
 app.post('/api/login', async (req, res) => {
     const { mail, password } = req.body;
-
     try {
-        const connection = await mysql.createConnection(dbConfig);
-        
-        const [users] = await connection.execute('SELECT * FROM Comptes WHERE mail = ?', [mail]);
-        await connection.end();
-
+        const users = await db.all('SELECT * FROM Comptes WHERE mail = ?', [mail]);
         if (users.length === 0) {
             return res.status(401).json({ message: "Identifiants incorrects" });
         }
 
         const user = users[0];
-
         const isValidPassword = await bcrypt.compare(password, user.mot_de_passe);
         
         if (!isValidPassword) {
@@ -92,14 +102,7 @@ app.post('/api/login', async (req, res) => {
         }
 
         const token = jwt.sign({ id: user.id, mail: user.mail, role: user.role }, SECRET_KEY, { expiresIn: '2h' });
-        
-        res.json({ 
-            token: token, 
-            role: user.role, 
-            nom: user.nom, 
-            prenom: user.prenom 
-        });
-
+        res.json({ token, role: user.role, nom: user.nom, prenom: user.prenom });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: "Erreur lors de la connexion" });
@@ -108,7 +111,6 @@ app.post('/api/login', async (req, res) => {
 
 // --- ROUTES PROTÉGÉES ---
 
-// Middleware de vérification
 const verifierToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -122,19 +124,15 @@ const verifierToken = (req, res, next) => {
     });
 };
 
-// 4. Liste des SAE pour le tableau de bord
 app.get('/api/sae', verifierToken, async (req, res) => {
     try {
-        const connection = await mysql.createConnection(dbConfig);
-        const [rows] = await connection.execute('SELECT * FROM SAE');
-        await connection.end();
+        const rows = await db.all('SELECT * FROM SAE');
         res.json(rows);
     } catch (error) {
         res.status(500).json({ message: "Erreur serveur" });
     }
 });
 
-// 5. NOUVEAU : Création d'une nouvelle SAE (Réservé aux enseignants)
 app.post('/api/sae', verifierToken, async (req, res) => {
     if (req.user.role !== 'enseignant') {
         return res.status(403).json({ message: "Seuls les enseignants peuvent créer une SAE." });
@@ -145,12 +143,10 @@ app.post('/api/sae', verifierToken, async (req, res) => {
     const date_creation = new Date().toISOString().split('T')[0]; 
 
     try {
-        const connection = await mysql.createConnection(dbConfig);
-        await connection.execute(
+        await db.run(
             'INSERT INTO SAE (nom, auteur_id, description, date_creation, documents) VALUES (?, ?, ?, ?, ?)',
             [nom, auteur_id, description, date_creation, documents || '']
         );
-        await connection.end();
         res.status(201).json({ message: "SAE créée avec succès !" });
     } catch (error) {
         console.error(error);
@@ -159,5 +155,5 @@ app.post('/api/sae', verifierToken, async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Serveur démarré sur le port ${PORT}, prêt à parler avec MySQL !`);
+    console.log(`Serveur démarré sur le port ${PORT}, en mode BASE DE DONNÉES LOCALE !`);
 });
