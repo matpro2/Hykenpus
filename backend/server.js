@@ -32,7 +32,6 @@ const upload = multer({ storage: storage });
 
 let db; 
 
-// --- INITIALISATION DE LA BASE DE DONNÉES LOCALE ---
 async function initDB() {
     db = await open({
         filename: './mmi_hub.sqlite', 
@@ -61,7 +60,6 @@ async function initDB() {
         );
     `);
 
-    // NOUVEAU : CRÉATION AUTOMATIQUE DU COMPTE ADMIN
     const adminExists = await db.get('SELECT * FROM Comptes WHERE mail = ?', ['Admin']);
     if (!adminExists) {
         const hashedAdminPw = await bcrypt.hash('Admin', 10);
@@ -69,14 +67,11 @@ async function initDB() {
             'INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role) VALUES (?, ?, ?, ?, ?)',
             ['Système', 'Admin', 'Admin', hashedAdminPw, 'admin']
         );
-        console.log("👑 Compte Admin créé (Identifiant: Admin / Mot de passe: Admin)");
     }
-
     console.log("✅ Base de données locale et système de fichiers prêts !");
 }
 initDB();
 
-// --- ROUTES PUBLIQUES ---
 app.get('/api/public/sae', async (req, res) => {
     try {
         const rows = await db.all(`
@@ -89,7 +84,6 @@ app.get('/api/public/sae', async (req, res) => {
     }
 });
 
-// --- AUTHENTIFICATION ---
 app.post('/api/register', async (req, res) => {
     const { nom, prenom, mail, password, role } = req.body;
     try {
@@ -124,7 +118,6 @@ app.post('/api/login', async (req, res) => {
     }
 });
 
-// --- ROUTES PROTÉGÉES ---
 const verifierToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -169,7 +162,7 @@ app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, re
     }
 });
 
-// NOUVEAU : ROUTE SPÉCIALE GÉNÉRATION POUR L'ADMIN
+// ROUTE DE GÉNÉRATION ADMIN
 app.post('/api/admin/generate', verifierToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ message: "Accès refusé. Réservé à l'Admin." });
     
@@ -184,34 +177,37 @@ app.post('/api/admin/generate', verifierToken, async (req, res) => {
             for(let i=0; i<limit; i++) {
                 const p = prenoms[Math.floor(Math.random() * prenoms.length)];
                 const n = noms[Math.floor(Math.random() * noms.length)];
-                const role = Math.random() > 0.8 ? 'enseignant' : 'etudiant'; // 20% de profs, 80% d'étudiants
+                const role = Math.random() > 0.8 ? 'enseignant' : 'etudiant'; 
                 const mail = `${p.toLowerCase()}.${n.toLowerCase()}${Math.floor(Math.random()*1000)}@test.fr`;
                 const pwd = await bcrypt.hash('password123', 10);
                 
                 await db.run('INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role) VALUES (?, ?, ?, ?, ?)', [n, p, mail, pwd, role]);
             }
-            res.json({ message: `✅ ${limit} comptes générés avec succès ! (Leur mot de passe à tous est : password123)` });
+            res.json({ message: `✅ ${limit} comptes générés avec succès ! (Mdp: password123)` });
         
         } else if (type === 'saes') {
             const profs = await db.all('SELECT id FROM Comptes WHERE role = "enseignant"');
-            if(profs.length === 0) return res.status(400).json({ message: "❌ Il faut au moins un compte 'Enseignant' pour pouvoir générer des SAEs." });
+            if(profs.length === 0) return res.status(400).json({ message: "❌ Il faut au moins un compte 'Enseignant'." });
 
-            const sujets = ['Création site web', 'Design UI/UX', 'Montage vidéo', 'Stratégie Com', 'Base de données', 'Développement React', 'Animation 3D', 'Infographie'];
+            const sujets = ['Création site web', 'Design UI/UX', 'Montage vidéo', 'Stratégie Com', 'Base de données', 'Développement React'];
             
             for(let i=0; i<limit; i++) {
                 const nom = `SAE ${Math.floor(Math.random() * 6) + 1}.0${Math.floor(Math.random() * 9) + 1} - ${sujets[Math.floor(Math.random() * sujets.length)]}`;
                 const auteur_id = profs[Math.floor(Math.random() * profs.length)].id;
-                const desc = "Ceci est une description générée automatiquement par le système Admin pour remplir le site et tester l'interface. Les étudiants devront réaliser ce projet avec soin.";
+                const desc = "Ceci est une description générée automatiquement.";
                 const date_c = new Date().toISOString().split('T')[0];
                 
+                // NOUVEAU : Génération d'une date ET d'une heure aléatoire
                 const futureDate = new Date();
-                futureDate.setDate(futureDate.getDate() + Math.floor(Math.random() * 60) + 7); // Entre +7 et +67 jours
-                const date_r = futureDate.toISOString().split('T')[0];
+                futureDate.setDate(futureDate.getDate() + Math.floor(Math.random() * 60) + 1); // Entre demain et +60 jours
+                futureDate.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60)); // Heure et minute aléatoires
+                const date_r = futureDate.toISOString().slice(0, 16); // Formate en YYYY-MM-DDTHH:mm
+                
                 const docs = "[]";
 
                 await db.run('INSERT INTO SAE (nom, auteur_id, description, date_creation, documents, date_rendu) VALUES (?, ?, ?, ?, ?, ?)', [nom, auteur_id, desc, date_c, docs, date_r]);
             }
-            res.json({ message: `✅ ${limit} SAEs générées de manière aléatoire !` });
+            res.json({ message: `✅ ${limit} SAEs générées !` });
         } else {
             res.status(400).json({ message: "Type inconnu." });
         }
