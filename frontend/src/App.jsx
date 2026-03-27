@@ -19,7 +19,8 @@ function App() {
   // États du formulaire de création de SAE
   const [nomSae, setNomSae] = useState('');
   const [descriptionSae, setDescriptionSae] = useState('');
-  const [fichiersSae, setFichiersSae] = useState([]); // Tableau de fichiers
+  const [dateRenduSae, setDateRenduSae] = useState(''); // NOUVEAU : État pour la date de rendu
+  const [fichiersSae, setFichiersSae] = useState([]); 
   
   const [erreur, setErreur] = useState(null);
   const [succes, setSucces] = useState(null);
@@ -80,12 +81,11 @@ function App() {
     e.preventDefault();
     setErreur(null);
     try {
-      // Création du paquet de données
       const formData = new FormData();
       formData.append('nom', nomSae);
       formData.append('description', descriptionSae);
+      formData.append('date_rendu', dateRenduSae); // On ajoute la date de rendu au paquet envoyé au serveur !
       
-      // Ajout des fichiers au paquet
       fichiersSae.forEach(fichier => {
         formData.append('fichiers', fichier);
       });
@@ -95,7 +95,7 @@ function App() {
       const donnees = await saeService.getListeSae(token);
       setSaes(donnees);
       
-      setNomSae(''); setDescriptionSae(''); setFichiersSae([]);
+      setNomSae(''); setDescriptionSae(''); setDateRenduSae(''); setFichiersSae([]);
       setVueActuelle('dashboard');
     } catch (err) {
       setErreur(err.message);
@@ -113,7 +113,6 @@ function App() {
     setPassword('');
   };
 
-  // Fonction pour afficher proprement les liens des fichiers joints
   const renderFichiers = (documentsJson) => {
     if (!documentsJson) return null;
     try {
@@ -124,7 +123,6 @@ function App() {
           <strong style={{ display: 'block', marginBottom: '5px', fontSize: '0.9rem' }}>📎 Pièces jointes :</strong>
           <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.9rem' }}>
             {fichiers.map((fichier, index) => {
-               // Enlève le timestamp du nom pour faire plus propre
                const nomAffiche = fichier.includes('-') ? fichier.split('-').slice(1).join('-') : fichier;
                return (
                  <li key={index} style={{ marginBottom: '5px' }}>
@@ -142,9 +140,13 @@ function App() {
     }
   };
 
-  // ==========================================
-  // VUE 1 : PUBLIC (Galerie)
-  // ==========================================
+  // NOUVEAU : Une petite fonction pour afficher la date joliment (ex: "15/12/2026")
+  const formatDate = (dateString) => {
+    if (!dateString) return null;
+    const [year, month, day] = dateString.split('-');
+    return `${day}/${month}/${year}`;
+  };
+
   if (vueActuelle === 'public') {
     const saesPubliquesFiltrees = anneeFiltre ? saes.filter(sae => sae.annee && sae.annee.toString() === anneeFiltre) : saes;
     return (
@@ -163,6 +165,11 @@ function App() {
           {saesPubliquesFiltrees.length === 0 ? <p>Aucune SAE (ou base de données vide).</p> : saesPubliquesFiltrees.map((sae) => (
              <div key={sae.id} className="sae-card">
                <h3>{sae.nom}</h3>
+               {sae.date_rendu && (
+                 <p style={{ color: '#d97706', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                   📅 À rendre pour le : {formatDate(sae.date_rendu)}
+                 </p>
+               )}
                <p>{sae.description}</p>
                {renderFichiers(sae.documents)}
              </div>
@@ -172,10 +179,8 @@ function App() {
     );
   }
 
-  // ==========================================
-  // VUE 2 : CONNEXION
-  // ==========================================
   if (vueActuelle === 'login') {
+    // ... code du login inchangé ...
     return (
       <div className="login-wrapper">
         <h1>Connexion</h1>
@@ -194,10 +199,8 @@ function App() {
     );
   }
 
-  // ==========================================
-  // VUE 3 : INSCRIPTION
-  // ==========================================
   if (vueActuelle === 'register') {
+    // ... code de l'inscription inchangé ...
     return (
       <div className="login-wrapper">
         <h1>Créer un compte</h1>
@@ -224,16 +227,27 @@ function App() {
     );
   }
 
-  // ==========================================
-  // VUE 4 : CRÉATION DE SAE
-  // ==========================================
   if (vueActuelle === 'create-sae') {
     return (
       <div className="login-wrapper" style={{ maxWidth: '600px' }}>
         <h1>Créer une nouvelle SAE</h1>
         <form onSubmit={handleCreateSae}>
           {erreur && <p style={{ color: 'var(--danger)' }}>{erreur}</p>}
+          
           <input type="text" placeholder="Nom de la SAE (ex: SAE 3.01)" value={nomSae} onChange={(e) => setNomSae(e.target.value)} required />
+          
+          {/* NOUVEAU : Champ pour sélectionner la date de rendu */}
+          <div style={{ marginBottom: '1rem', textAlign: 'left' }}>
+            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold', color: 'var(--text)' }}>Date de rendu :</label>
+            <input 
+              type="date" 
+              value={dateRenduSae} 
+              onChange={(e) => setDateRenduSae(e.target.value)} 
+              required 
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontFamily: 'inherit' }}
+            />
+          </div>
+
           <textarea placeholder="Description détaillée de la SAE" value={descriptionSae} onChange={(e) => setDescriptionSae(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '1rem', minHeight: '100px', fontFamily: 'inherit' }} />
           
           <div style={{ marginBottom: '1rem', padding: '1rem', border: '1px dashed var(--primary)', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
@@ -259,9 +273,7 @@ function App() {
     );
   }
 
-  // ==========================================
-  // VUE 5 : TABLEAU DE BORD (Protégé)
-  // ==========================================
+  // TABLEAU DE BORD (Protégé)
   return (
     <div className="dashboard-container">
       <div className="header-dashboard">
@@ -293,6 +305,12 @@ function App() {
           saes.map((sae) => (
             <div key={sae.id} className="sae-card">
               <h3>{sae.nom}</h3>
+              {/* NOUVEAU : Affichage de la date de rendu dans le Dashboard */}
+              {sae.date_rendu && (
+                 <p style={{ color: '#d97706', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                   📅 À rendre pour le : {formatDate(sae.date_rendu)}
+                 </p>
+               )}
               <p><strong>Description :</strong> {sae.description}</p>
               {renderFichiers(sae.documents)}
             </div>
