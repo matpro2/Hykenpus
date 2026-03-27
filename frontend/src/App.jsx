@@ -29,17 +29,17 @@ function App() {
   const [saes, setSaes] = useState([]);
   const [anneeFiltre, setAnneeFiltre] = useState(''); 
 
-  useEffect(() => {
+useEffect(() => {
     if (token) {
-      if (vueActuelle === 'public' || vueActuelle === 'login' || vueActuelle === 'register') {
-        setVueActuelle('dashboard');
-      }
+      // Si on a un token et qu'on était sur les pages d'accueil, on force le dashboard
+      setVueActuelle(prev => (prev === 'public' || prev === 'login' || prev === 'register') ? 'dashboard' : prev);
       saeService.getListeSae(token).then(setSaes).catch(handleLogout);
     } else {
-      setVueActuelle('public');
+      // Si pas de token, on empêche l'accès au dashboard sans bloquer le formulaire de connexion
+      setVueActuelle(prev => (prev === 'dashboard' || prev === 'create-sae' || prev === 'admin') ? 'public' : prev);
       saeService.getPublicListeSae().then(setSaes).catch(console.error);
     }
-  }, [token, vueActuelle]);
+  }, [token]); // <-- Le secret est là : on a enlevé 'vueActuelle' de ce tableau !
 
   const handleLogin = async (e) => {
     e.preventDefault();
