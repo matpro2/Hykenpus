@@ -45,7 +45,8 @@ async function initDB() {
             prenom TEXT NOT NULL,
             mail TEXT UNIQUE NOT NULL,
             mot_de_passe TEXT NOT NULL,
-            role TEXT NOT NULL
+            role TEXT NOT NULL,
+            classe TEXT -- NOUVEAU : La classe de l'étudiant
         );
         
         CREATE TABLE IF NOT EXISTS SAE (
@@ -56,6 +57,7 @@ async function initDB() {
             date_creation TEXT,
             documents TEXT,
             date_rendu TEXT,
+            classe_cible TEXT, -- NOUVEAU : À quelle classe s'adresse cette SAE ?
             FOREIGN KEY (auteur_id) REFERENCES Comptes(id) ON DELETE CASCADE
         );
     `);
@@ -64,11 +66,11 @@ async function initDB() {
     if (!adminExists) {
         const hashedAdminPw = await bcrypt.hash('Admin', 10);
         await db.run(
-            'INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role) VALUES (?, ?, ?, ?, ?)',
-            ['Système', 'Admin', 'Admin', hashedAdminPw, 'admin']
+            'INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role, classe) VALUES (?, ?, ?, ?, ?, ?)',
+            ['Système', 'Admin', 'Admin', hashedAdminPw, 'admin', 'Toutes']
         );
     }
-    console.log("✅ Base de données locale et système de fichiers prêts !");
+    console.log("✅ Base de données locale prête (Avec système de Classes) !");
 }
 initDB();
 
@@ -85,15 +87,19 @@ app.get('/api/public/sae', async (req, res) => {
 });
 
 app.post('/api/register', async (req, res) => {
-    const { nom, prenom, mail, password, role } = req.body;
+    // On récupère la classe envoyée par le formulaire
+    const { nom, prenom, mail, password, role, classe } = req.body;
     try {
         const existingUsers = await db.all('SELECT * FROM Comptes WHERE mail = ?', [mail]);
         if (existingUsers.length > 0) return res.status(400).json({ message: "Cet email est déjà utilisé" });
 
         const hashedPassword = await bcrypt.hash(password, 10);
+        // Si c'est un enseignant, sa classe par défaut est 'Toutes'
+        const classeUser = role === 'enseignant' ? 'Toutes' : (classe || 'MMI-A1');
+
         await db.run(
-            'INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role) VALUES (?, ?, ?, ?, ?)',
-            [nom, prenom, mail, hashedPassword, role || 'etudiant']
+            'INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role, classe) VALUES (?, ?, ?, ?, ?, ?)',
+            [nom, prenom, mail, hashedPassword, role || 'etudiant', classeUser]
         );
         res.status(201).json({ message: "Compte créé avec succès !" });
     } catch (error) {
@@ -111,8 +117,8 @@ app.post('/api/login', async (req, res) => {
         const isValidPassword = await bcrypt.compare(password, user.mot_de_passe);
         if (!isValidPassword) return res.status(401).json({ message: "Identifiants incorrects" });
 
-        const token = jwt.sign({ id: user.id, mail: user.mail, role: user.role }, SECRET_KEY, { expiresIn: '2h' });
-        res.json({ token, role: user.role, nom: user.nom, prenom: user.prenom });
+        const token = jwt.sign({ id: user.id, mail: user.mail, role: user.role, classe: user.classe }, SECRET_KEY, { expiresIn: '2h' });
+        res.json({ token, role: user.role, nom: user.nom, prenom: user.prenom, classe: user.classe });
     } catch (error) {
         res.status(500).json({ message: "Erreur lors de la connexion" });
     }
@@ -130,10 +136,24 @@ const verifierToken = (req, res, next) => {
     });
 };
 
+// NOUVEAU : LE FILTRE INTELLIGENT PAR RÔLE ET CLASSE
 app.get('/api/sae', verifierToken, async (req, res) => {
     try {
-        const rows = await db.all('SELECT * FROM SAE');
-        res.json(rows);
+        if (req.user.role === 'admin') {
+            // L'admin voit absolument TOUT
+            const rows = await db.all('SELECT * FROM SAE');
+            return res.json(rows);
+        } else if (req.user.role === 'enseignant') {
+            // L'enseignant voit uniquement les SAEs qu'IL a publiées
+            const rows = await db.all('SELECT * FROM SAE WHERE auteur_id = ?', [req.user.id]);
+            return res.json(rows);
+        } else {
+            // L'étudiant voit les SAEs destinées à SA classe OU à 'Toutes'
+            // On re-cherche sa classe exacte en BDD par sécurité
+            const userDb = await db.get('SELECT classe FROM Comptes WHERE id = ?', [req.user.id]);
+            const rows = await db.all('SELECT * FROM SAE WHERE classe_cible = ? OR classe_cible = ?', [userDb.classe, 'Toutes']);
+            return res.json(rows);
+        }
     } catch (error) {
         res.status(500).json({ message: "Erreur serveur" });
     }
@@ -144,7 +164,7 @@ app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, re
         return res.status(403).json({ message: "Non autorisé à créer une SAE." });
     }
 
-    const { nom, description, date_rendu } = req.body;
+    const { nom, description, date_rendu, classe_cible } = req.body;
     const auteur_id = req.user.id; 
     const date_creation = new Date().toISOString().split('T')[0]; 
 
@@ -153,8 +173,8 @@ app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, re
 
     try {
         await db.run(
-            'INSERT INTO SAE (nom, auteur_id, description, date_creation, documents, date_rendu) VALUES (?, ?, ?, ?, ?, ?)',
-            [nom, auteur_id, description, date_creation, documentsStr, date_rendu]
+            'INSERT INTO SAE (nom, auteur_id, description, date_creation, documents, date_rendu, classe_cible) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [nom, auteur_id, description, date_creation, documentsStr, date_rendu, classe_cible || 'Toutes']
         );
         res.status(201).json({ message: "SAE créée avec succès !" });
     } catch (error) {
@@ -168,11 +188,12 @@ app.post('/api/admin/generate', verifierToken, async (req, res) => {
     
     const { type, count } = req.body;
     const limit = parseInt(count) || 5;
+    const classesList = ['MMI-A1', 'MMI-A2', 'MMI-B1', 'MMI-B2', 'Toutes'];
 
     try {
         if (type === 'users') {
-            const prenoms = ['Lukas', 'Emma', 'Thomas', 'Chloe', 'Hugo', 'Lea', 'Maxime', 'Manon', 'Antoine', 'Camille'];
-            const noms = ['Martin', 'Bernard', 'Dubois', 'Thomas', 'Robert', 'Richard', 'Petit', 'Durand', 'Leroy', 'Moreau'];
+            const prenoms = ['Lukas', 'Emma', 'Thomas', 'Chloe', 'Hugo', 'Lea', 'Maxime', 'Manon', 'Antoine'];
+            const noms = ['Martin', 'Bernard', 'Dubois', 'Thomas', 'Robert', 'Richard', 'Petit', 'Durand'];
             
             for(let i=0; i<limit; i++) {
                 const p = prenoms[Math.floor(Math.random() * prenoms.length)];
@@ -180,8 +201,9 @@ app.post('/api/admin/generate', verifierToken, async (req, res) => {
                 const role = Math.random() > 0.8 ? 'enseignant' : 'etudiant'; 
                 const mail = `${p.toLowerCase()}.${n.toLowerCase()}${Math.floor(Math.random()*1000)}@test.fr`;
                 const pwd = await bcrypt.hash('password123', 10);
+                const classe = role === 'enseignant' ? 'Toutes' : classesList[Math.floor(Math.random() * 4)]; // 4 premières
                 
-                await db.run('INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role) VALUES (?, ?, ?, ?, ?)', [n, p, mail, pwd, role]);
+                await db.run('INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role, classe) VALUES (?, ?, ?, ?, ?, ?)', [n, p, mail, pwd, role, classe]);
             }
             res.json({ message: `✅ ${limit} comptes générés avec succès ! (Mdp: password123)` });
         
@@ -189,30 +211,28 @@ app.post('/api/admin/generate', verifierToken, async (req, res) => {
             const profs = await db.all('SELECT id FROM Comptes WHERE role = "enseignant"');
             if(profs.length === 0) return res.status(400).json({ message: "❌ Il faut au moins un compte 'Enseignant'." });
 
-            const sujets = ['Création site web', 'Design UI/UX', 'Montage vidéo', 'Stratégie Com', 'Base de données', 'Développement React'];
+            const sujets = ['Création site web', 'Design UI/UX', 'Montage vidéo', 'Stratégie Com', 'Base de données', 'React'];
             
             for(let i=0; i<limit; i++) {
-                const nom = `SAE ${Math.floor(Math.random() * 6) + 1}.0${Math.floor(Math.random() * 9) + 1} - ${sujets[Math.floor(Math.random() * sujets.length)]}`;
+                const nom = `SAE 3.0${Math.floor(Math.random() * 9) + 1} - ${sujets[Math.floor(Math.random() * sujets.length)]}`;
                 const auteur_id = profs[Math.floor(Math.random() * profs.length)].id;
                 const desc = "Ceci est une description générée automatiquement.";
                 const date_c = new Date().toISOString().split('T')[0];
                 
-                // NOUVEAU : Génération d'une date ET d'une heure aléatoire
                 const futureDate = new Date();
-                futureDate.setDate(futureDate.getDate() + Math.floor(Math.random() * 60) + 1); // Entre demain et +60 jours
-                futureDate.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60)); // Heure et minute aléatoires
-                const date_r = futureDate.toISOString().slice(0, 16); // Formate en YYYY-MM-DDTHH:mm
-                
+                futureDate.setDate(futureDate.getDate() + Math.floor(Math.random() * 60) + 1); 
+                futureDate.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60)); 
+                const date_r = futureDate.toISOString().slice(0, 16); 
                 const docs = "[]";
+                const classe = classesList[Math.floor(Math.random() * classesList.length)];
 
-                await db.run('INSERT INTO SAE (nom, auteur_id, description, date_creation, documents, date_rendu) VALUES (?, ?, ?, ?, ?, ?)', [nom, auteur_id, desc, date_c, docs, date_r]);
+                await db.run('INSERT INTO SAE (nom, auteur_id, description, date_creation, documents, date_rendu, classe_cible) VALUES (?, ?, ?, ?, ?, ?, ?)', [nom, auteur_id, desc, date_c, docs, date_r, classe]);
             }
             res.json({ message: `✅ ${limit} SAEs générées !` });
         } else {
             res.status(400).json({ message: "Type inconnu." });
         }
     } catch (error) {
-        console.error(error);
         res.status(500).json({ message: "Erreur lors de la génération." });
     }
 });

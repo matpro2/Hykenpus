@@ -3,6 +3,9 @@ import { useState, useEffect } from 'react';
 import { saeService, SERVER_URL } from './services/saeServices';
 import './App.css';
 
+// NOUVEAU : La liste de toutes les classes possibles
+const CLASSES_DISPOS = ['MMI-A1', 'MMI-A2', 'MMI-B1', 'MMI-B2', 'MMI-C1', 'MMI-C2'];
+
 function App() {
   const [token, setToken] = useState(localStorage.getItem('jwtToken') || null);
   const [role, setRole] = useState(localStorage.getItem('userRole') || null);
@@ -14,10 +17,12 @@ function App() {
   const [nom, setNom] = useState('');
   const [prenom, setPrenom] = useState('');
   const [roleInscription, setRoleInscription] = useState('etudiant');
+  const [classeInscription, setClasseInscription] = useState(CLASSES_DISPOS[0]); // Pour l'étudiant
 
   const [nomSae, setNomSae] = useState('');
   const [descriptionSae, setDescriptionSae] = useState('');
   const [dateRenduSae, setDateRenduSae] = useState(''); 
+  const [classeCible, setClasseCible] = useState('Toutes'); // Pour la SAE
   const [fichiersSae, setFichiersSae] = useState([]); 
   
   const [quantiteGeneration, setQuantiteGeneration] = useState(10);
@@ -26,8 +31,6 @@ function App() {
   const [erreur, setErreur] = useState(null);
   const [succes, setSucces] = useState(null);
   const [saes, setSaes] = useState([]);
-  
-  // NOUVEAU : État pour gérer le tri par date ('asc' = plus proche, 'desc' = plus lointain)
   const [triDate, setTriDate] = useState('asc'); 
 
   useEffect(() => {
@@ -55,7 +58,8 @@ function App() {
     e.preventDefault();
     setErreur(null); setSucces(null);
     try {
-      await saeService.register({ nom, prenom, mail, password, role: roleInscription });
+      // On envoie la classe dans le package
+      await saeService.register({ nom, prenom, mail, password, role: roleInscription, classe: classeInscription });
       const data = await saeService.login(mail, password);
       setToken(data.token); setRole(data.role); setPrenomUser(data.prenom);
       localStorage.setItem('jwtToken', data.token); localStorage.setItem('userRole', data.role); localStorage.setItem('userPrenom', data.prenom);
@@ -71,7 +75,8 @@ function App() {
       const formData = new FormData();
       formData.append('nom', nomSae);
       formData.append('description', descriptionSae);
-      formData.append('date_rendu', dateRenduSae); // Enverra YYYY-MM-DDTHH:mm
+      formData.append('date_rendu', dateRenduSae); 
+      formData.append('classe_cible', classeCible); // La classe ciblée
       
       fichiersSae.forEach(fichier => formData.append('fichiers', fichier));
 
@@ -79,7 +84,7 @@ function App() {
       const donnees = await saeService.getListeSae(token);
       setSaes(donnees);
       
-      setNomSae(''); setDescriptionSae(''); setDateRenduSae(''); setFichiersSae([]);
+      setNomSae(''); setDescriptionSae(''); setDateRenduSae(''); setClasseCible('Toutes'); setFichiersSae([]);
       setVueActuelle('dashboard');
     } catch (err) { setErreur(err.message); }
   };
@@ -102,31 +107,22 @@ function App() {
     setSaes([]); setVueActuelle('public'); setMail(''); setPassword('');
   };
 
-  // NOUVEAU : Fonction de tri des SAE par date de rendu
   const getSaesTriees = (listeASorter) => {
     return [...listeASorter].sort((a, b) => {
-      // Si pas de date, on les met à la fin
       if (!a.date_rendu) return 1;
       if (!b.date_rendu) return -1;
-      
       const dateA = new Date(a.date_rendu).getTime();
       const dateB = new Date(b.date_rendu).getTime();
-      
       return triDate === 'asc' ? dateA - dateB : dateB - dateA;
     });
   };
 
-  // NOUVEAU : Formatage Date + Heure
   const formatDateTime = (dateString) => {
     if (!dateString) return null;
     const dateObj = new Date(dateString);
-    if (isNaN(dateObj)) return dateString; // Si ancienne donnée mal formatée
-    
-    // Extrait la date "15/12/2026"
+    if (isNaN(dateObj)) return dateString; 
     const dateFR = dateObj.toLocaleDateString('fr-FR');
-    // Extrait l'heure "23:47" et remplace ":" par "h" -> "23h47"
     const timeFR = dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
-    
     return `${dateFR} à ${timeFR}`;
   };
 
@@ -155,7 +151,7 @@ function App() {
 
   // --- VUES PUBLIQUES ET CONNEXION ---
   if (vueActuelle === 'public') {
-    const saesAffichees = getSaesTriees(saes); // On applique le tri !
+    const saesAffichees = getSaesTriees(saes); 
     return (
       <div className="dashboard-container">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem', borderBottom: '2px solid var(--border)', paddingBottom: '1rem' }}>
@@ -164,18 +160,21 @@ function App() {
             <p style={{ color: 'var(--text-muted)', margin: 0 }}>La vitrine des travaux MMI</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-            {/* NOUVEAU : Menu déroulant pour le tri */}
             <select value={triDate} onChange={(e) => setTriDate(e.target.value)} style={{ padding: '0.5rem', borderRadius: '5px', border: '1px solid var(--border)' }}>
               <option value="asc">Trier : Rendu le plus proche</option>
               <option value="desc">Trier : Rendu le plus lointain</option>
             </select>
             <button onClick={() => setVueActuelle('login')} className="btn-primary">Connexion</button>
+            <button onClick={() => setVueActuelle('register')} className="btn-primary" style={{ background: 'white', color: 'var(--primary)', border: '1px solid var(--primary)' }}>Inscription</button>
           </div>
         </div>
         <div className="sae-list">
-          {saesAffichees.length === 0 ? <p>Aucune SAE (ou base de données vide).</p> : saesAffichees.map((sae) => (
+          {saesAffichees.length === 0 ? <p>Aucune SAE.</p> : saesAffichees.map((sae) => (
              <div key={sae.id} className="sae-card">
-               <h3>{sae.nom}</h3>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                 <h3>{sae.nom}</h3>
+                 <span style={{ backgroundColor: '#e2e8f0', color: '#475569', padding: '3px 8px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' }}>{sae.classe_cible}</span>
+               </div>
                {sae.date_rendu && <p style={{ color: '#d97706', fontWeight: 'bold', fontSize: '0.9rem' }}>📅 À rendre pour le : {formatDateTime(sae.date_rendu)}</p>}
                <p>{sae.description}</p>
                {renderFichiers(sae.documents)}
@@ -213,11 +212,22 @@ function App() {
           </div>
           <input type="email" placeholder="Adresse e-mail" value={mail} onChange={(e) => setMail(e.target.value)} required />
           <input type="password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" />
-          <select value={roleInscription} onChange={(e) => setRoleInscription(e.target.value)} style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
-            <option value="etudiant">Je suis Étudiant</option>
-            <option value="enseignant">Je suis Enseignant</option>
-          </select>
-          <button type="submit" className="btn-primary">S'inscrire</button>
+          
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <select value={roleInscription} onChange={(e) => setRoleInscription(e.target.value)} style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', flex: 1 }}>
+              <option value="etudiant">Étudiant</option>
+              <option value="enseignant">Enseignant</option>
+            </select>
+            
+            {/* On affiche le choix de la classe seulement pour les étudiants */}
+            {roleInscription === 'etudiant' && (
+              <select value={classeInscription} onChange={(e) => setClasseInscription(e.target.value)} style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', flex: 1 }}>
+                {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            )}
+          </div>
+
+          <button type="submit" className="btn-primary" style={{ marginTop: '10px' }}>S'inscrire</button>
         </form>
         <button onClick={() => setVueActuelle('login')} style={{ background: 'none', color: 'var(--text-muted)', marginTop: '1rem', border: 'none', cursor: 'pointer', textDecoration: 'underline', width: '100%' }}>Déjà inscrit ? Connexion</button>
       </div>
@@ -231,11 +241,21 @@ function App() {
         <h1>Créer une nouvelle SAE</h1>
         <form onSubmit={handleCreateSae}>
           <input type="text" placeholder="Nom de la SAE (ex: SAE 3.01)" value={nomSae} onChange={(e) => setNomSae(e.target.value)} required />
-          <div style={{ marginBottom: '1rem', textAlign: 'left' }}>
-            <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Date et Heure de rendu :</label>
-            {/* NOUVEAU : On utilise datetime-local pour forcer la sélection de l'heure */}
-            <input type="datetime-local" value={dateRenduSae} onChange={(e) => setDateRenduSae(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontFamily: 'inherit' }}/>
+          
+          <div style={{ display: 'flex', gap: '10px', marginBottom: '1rem' }}>
+            <div style={{ flex: 1, textAlign: 'left' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Date de rendu :</label>
+              <input type="datetime-local" value={dateRenduSae} onChange={(e) => setDateRenduSae(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontFamily: 'inherit' }}/>
+            </div>
+            <div style={{ flex: 1, textAlign: 'left' }}>
+              <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Classe ciblée :</label>
+              <select value={classeCible} onChange={(e) => setClasseCible(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontFamily: 'inherit' }}>
+                <option value="Toutes">Toutes les classes</option>
+                {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
           </div>
+
           <textarea placeholder="Description" value={descriptionSae} onChange={(e) => setDescriptionSae(e.target.value)} required style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', marginBottom: '1rem', minHeight: '100px' }} />
           <div style={{ marginBottom: '1rem', padding: '1rem', border: '1px dashed var(--primary)', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
             <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', color: 'var(--primary)' }}>Joindre des fichiers :</label>
@@ -252,7 +272,6 @@ function App() {
   }
 
   if (vueActuelle === 'admin') {
-    // ... Code admin inchangé
     return (
       <div className="dashboard-container">
          <div className="header-dashboard">
@@ -260,7 +279,7 @@ function App() {
           <button onClick={() => setVueActuelle('dashboard')} className="btn-primary" style={{ background: 'white', color: '#8b5cf6', border: '1px solid #8b5cf6' }}>Retour au Tableau de Bord</button>
         </div>
         <div style={{ backgroundColor: '#f5f3ff', padding: '2rem', borderRadius: '10px', border: '1px solid #ddd6fe' }}>
-          <h2>Générateur de fausses données (Mock Data)</h2>
+          <h2>Générateur de fausses données</h2>
           {erreur && <div style={{ padding: '10px', backgroundColor: '#fee2e2', color: '#dc2626', borderRadius: '5px', marginBottom: '1rem' }}>{erreur}</div>}
           {adminMessage && <div style={{ padding: '10px', backgroundColor: '#dcfce3', color: '#166534', borderRadius: '5px', marginBottom: '1rem' }}>{adminMessage}</div>}
           <div style={{ marginBottom: '1rem' }}>
@@ -277,7 +296,7 @@ function App() {
   }
 
   // TABLEAU DE BORD STANDARD
-  const saesAfficheesDash = getSaesTriees(saes); // On applique le tri ici aussi
+  const saesAfficheesDash = getSaesTriees(saes); 
   
   return (
     <div className="dashboard-container">
@@ -292,8 +311,6 @@ function App() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <h2>Vue {role === 'admin' ? 'Système' : role === 'enseignant' ? 'Enseignant' : 'Étudiant'}</h2>
-          
-          {/* Menu déroulant de tri pour le Dashboard */}
           <select value={triDate} onChange={(e) => setTriDate(e.target.value)} style={{ padding: '0.5rem', borderRadius: '5px', border: '1px solid var(--border)' }}>
               <option value="asc">Trier : Plus proche</option>
               <option value="desc">Trier : Plus lointain</option>
@@ -309,7 +326,10 @@ function App() {
       <div className="sae-list">
         {saesAfficheesDash.length === 0 ? <p>Aucune SAE dans la base de données.</p> : saesAfficheesDash.map((sae) => (
             <div key={sae.id} className="sae-card">
-              <h3>{sae.nom}</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                 <h3>{sae.nom}</h3>
+                 <span style={{ backgroundColor: '#e2e8f0', color: '#475569', padding: '3px 8px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' }}>{sae.classe_cible}</span>
+              </div>
               {sae.date_rendu && <p style={{ color: '#d97706', fontWeight: 'bold', fontSize: '0.9rem' }}>📅 À rendre pour le : {formatDateTime(sae.date_rendu)}</p>}
               <p><strong>Description :</strong> {sae.description}</p>
               {renderFichiers(sae.documents)}
