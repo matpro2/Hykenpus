@@ -3,7 +3,6 @@ import { useState, useEffect } from 'react';
 import { saeService, SERVER_URL } from './services/saeServices';
 import './App.css';
 
-// NOUVEAU : La liste de toutes les classes possibles
 const CLASSES_DISPOS = ['MMI-A1', 'MMI-A2', 'MMI-B1', 'MMI-B2', 'MMI-C1', 'MMI-C2'];
 
 function App() {
@@ -17,31 +16,40 @@ function App() {
   const [nom, setNom] = useState('');
   const [prenom, setPrenom] = useState('');
   const [roleInscription, setRoleInscription] = useState('etudiant');
-  const [classeInscription, setClasseInscription] = useState(CLASSES_DISPOS[0]); // Pour l'étudiant
+  const [classeInscription, setClasseInscription] = useState(CLASSES_DISPOS[0]); 
 
   const [nomSae, setNomSae] = useState('');
   const [descriptionSae, setDescriptionSae] = useState('');
   const [dateRenduSae, setDateRenduSae] = useState(''); 
-  const [classeCible, setClasseCible] = useState('Toutes'); // Pour la SAE
+  const [classeCible, setClasseCible] = useState('Toutes'); 
   const [fichiersSae, setFichiersSae] = useState([]); 
   
   const [quantiteGeneration, setQuantiteGeneration] = useState(10);
   const [adminMessage, setAdminMessage] = useState(null);
+  const [listeUtilisateurs, setListeUtilisateurs] = useState([]); // NOUVEAU : Pour l'admin
 
   const [erreur, setErreur] = useState(null);
   const [succes, setSucces] = useState(null);
   const [saes, setSaes] = useState([]);
   const [triDate, setTriDate] = useState('asc'); 
 
+  // Surveille la connexion et la vue Admin
   useEffect(() => {
     if (token) {
-      setVueActuelle(prev => (prev === 'public' || prev === 'login' || prev === 'register') ? 'dashboard' : prev);
+      if (vueActuelle === 'public' || vueActuelle === 'login' || vueActuelle === 'register') {
+        setVueActuelle('dashboard');
+      }
       saeService.getListeSae(token).then(setSaes).catch(handleLogout);
+      
+      // NOUVEAU : Si on ouvre le panneau admin, on charge la liste des comptes !
+      if (vueActuelle === 'admin' && role === 'admin') {
+         saeService.getAllUsers(token).then(setListeUtilisateurs).catch(e => console.error(e));
+      }
     } else {
       setVueActuelle(prev => (prev === 'dashboard' || prev === 'create-sae' || prev === 'admin') ? 'public' : prev);
       saeService.getPublicListeSae().then(setSaes).catch(console.error);
     }
-  }, [token]);
+  }, [token, vueActuelle, role]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -58,7 +66,6 @@ function App() {
     e.preventDefault();
     setErreur(null); setSucces(null);
     try {
-      // On envoie la classe dans le package
       await saeService.register({ nom, prenom, mail, password, role: roleInscription, classe: classeInscription });
       const data = await saeService.login(mail, password);
       setToken(data.token); setRole(data.role); setPrenomUser(data.prenom);
@@ -76,7 +83,7 @@ function App() {
       formData.append('nom', nomSae);
       formData.append('description', descriptionSae);
       formData.append('date_rendu', dateRenduSae); 
-      formData.append('classe_cible', classeCible); // La classe ciblée
+      formData.append('classe_cible', classeCible); 
       
       fichiersSae.forEach(fichier => formData.append('fichiers', fichier));
 
@@ -97,8 +104,28 @@ function App() {
       if (type === 'saes') {
         const donnees = await saeService.getListeSae(token);
         setSaes(donnees);
+      } else if (type === 'users') {
+        // Recharge la liste des utilisateurs générés
+        const users = await saeService.getAllUsers(token);
+        setListeUtilisateurs(users);
       }
     } catch(err) { setErreur(err.message); }
+  };
+
+  // NOUVEAU : Fonction déclenchée lors du clic sur le bouton "Se connecter en tant que..."
+  const handleImpersonate = async (userId) => {
+    try {
+      const data = await saeService.impersonateUser(userId, token);
+      
+      // On remplace nos identifiants actuels par ceux de la personne ciblée
+      setToken(data.token); setRole(data.role); setPrenomUser(data.prenom);
+      localStorage.setItem('jwtToken', data.token); localStorage.setItem('userRole', data.role); localStorage.setItem('userPrenom', data.prenom);
+      
+      // On le renvoie sur le dashboard de cet utilisateur
+      setVueActuelle('dashboard');
+    } catch(err) {
+      setErreur(err.message);
+    }
   };
 
   const handleLogout = () => {
@@ -149,7 +176,7 @@ function App() {
     } catch(e) { return null; }
   };
 
-  // --- VUES PUBLIQUES ET CONNEXION ---
+  // --- VUES ---
   if (vueActuelle === 'public') {
     const saesAffichees = getSaesTriees(saes); 
     return (
@@ -218,8 +245,6 @@ function App() {
               <option value="etudiant">Étudiant</option>
               <option value="enseignant">Enseignant</option>
             </select>
-            
-            {/* On affiche le choix de la classe seulement pour les étudiants */}
             {roleInscription === 'etudiant' && (
               <select value={classeInscription} onChange={(e) => setClasseInscription(e.target.value)} style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', flex: 1 }}>
                 {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
@@ -234,7 +259,6 @@ function App() {
     );
   }
 
-  // --- VUES PROTÉGÉES ---
   if (vueActuelle === 'create-sae') {
     return (
       <div className="login-wrapper" style={{ maxWidth: '600px' }}>
@@ -271,15 +295,17 @@ function App() {
     );
   }
 
+  // PANNEAU ADMIN
   if (vueActuelle === 'admin') {
     return (
       <div className="dashboard-container">
          <div className="header-dashboard">
-          <h1 style={{ color: '#8b5cf6' }}>👑 Panneau d'Administration</h1>
-          <button onClick={() => setVueActuelle('dashboard')} className="btn-primary" style={{ background: 'white', color: '#8b5cf6', border: '1px solid #8b5cf6' }}>Retour au Tableau de Bord</button>
+          <h1 style={{ color: '#8b5cf6', margin: 0 }}>👑 Panneau d'Administration</h1>
+          <button onClick={() => setVueActuelle('dashboard')} className="btn-primary" style={{ background: 'white', color: '#8b5cf6', border: '1px solid #8b5cf6', margin: 0 }}>Retour au Dashboard</button>
         </div>
-        <div style={{ backgroundColor: '#f5f3ff', padding: '2rem', borderRadius: '10px', border: '1px solid #ddd6fe' }}>
-          <h2>Générateur de fausses données</h2>
+        
+        <div style={{ backgroundColor: '#f5f3ff', padding: '2rem', borderRadius: '10px', border: '1px solid #ddd6fe', marginBottom: '2rem' }}>
+          <h2 style={{ marginTop: 0 }}>Générateur de données (Mock Data)</h2>
           {erreur && <div style={{ padding: '10px', backgroundColor: '#fee2e2', color: '#dc2626', borderRadius: '5px', marginBottom: '1rem' }}>{erreur}</div>}
           {adminMessage && <div style={{ padding: '10px', backgroundColor: '#dcfce3', color: '#166534', borderRadius: '5px', marginBottom: '1rem' }}>{adminMessage}</div>}
           <div style={{ marginBottom: '1rem' }}>
@@ -290,6 +316,49 @@ function App() {
             <button onClick={() => handleGenerate('users')} className="btn-primary" style={{ background: '#3b82f6', borderColor: '#3b82f6' }}>👤 Générer des Comptes</button>
             <button onClick={() => handleGenerate('saes')} className="btn-primary" style={{ background: '#f59e0b', borderColor: '#f59e0b' }}>📚 Générer des SAEs</button>
           </div>
+        </div>
+
+        {/* NOUVEAU : LA LISTE DES UTILISATEURS AVEC BOUTON DE CONNEXION */}
+        <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '10px', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
+          <h2 style={{ marginTop: 0, color: '#1e293b' }}>Base de données des Comptes</h2>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem', minWidth: '600px' }}>
+            <thead>
+              <tr style={{ borderBottom: '2px solid #cbd5e1', textAlign: 'left', color: '#64748b' }}>
+                <th style={{ padding: '10px' }}>Nom</th>
+                <th style={{ padding: '10px' }}>Email</th>
+                <th style={{ padding: '10px' }}>Rôle</th>
+                <th style={{ padding: '10px' }}>Classe</th>
+                <th style={{ padding: '10px' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {listeUtilisateurs.map(user => (
+                <tr key={user.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                  <td style={{ padding: '10px', fontWeight: 'bold' }}>{user.prenom} {user.nom}</td>
+                  <td style={{ padding: '10px', color: '#475569' }}>{user.mail}</td>
+                  <td style={{ padding: '10px' }}>
+                    <span style={{ backgroundColor: user.role === 'admin' ? '#f3e8ff' : user.role === 'enseignant' ? '#dcfce3' : '#e0f2fe', color: user.role === 'admin' ? '#7e22ce' : user.role === 'enseignant' ? '#166534' : '#0369a1', padding: '3px 8px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                        {user.role}
+                    </span>
+                  </td>
+                  <td style={{ padding: '10px' }}>{user.classe}</td>
+                  <td style={{ padding: '10px' }}>
+                    {user.role !== 'admin' && (
+                        <button 
+                          onClick={() => handleImpersonate(user.id)} 
+                          style={{ padding: '6px 12px', backgroundColor: 'transparent', color: '#3b82f6', border: '1px solid #3b82f6', borderRadius: '5px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 'bold' }}
+                        >
+                            🔗 Se connecter
+                        </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {listeUtilisateurs.length === 0 && (
+                <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>Chargement des utilisateurs...</td></tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     );
