@@ -9,6 +9,7 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('jwtToken') || null);
   const [role, setRole] = useState(localStorage.getItem('userRole') || null);
   const [prenomUser, setPrenomUser] = useState(localStorage.getItem('userPrenom') || '');
+  const [userClasse, setUserClasse] = useState(localStorage.getItem('userClasse') || ''); // NOUVEAU: on garde en mémoire sa classe
   const [vueActuelle, setVueActuelle] = useState('public');
 
   const [mail, setMail] = useState('');
@@ -16,7 +17,9 @@ function App() {
   const [nom, setNom] = useState('');
   const [prenom, setPrenom] = useState('');
   const [roleInscription, setRoleInscription] = useState('etudiant');
-  const [classeInscription, setClasseInscription] = useState(CLASSES_DISPOS[0]); 
+  
+  const [classeInscription, setClasseInscription] = useState(CLASSES_DISPOS[0]); // Étudiant
+  const [classesEnseignant, setClassesEnseignant] = useState([]); // NOUVEAU: Multiples classes pour le prof
 
   const [nomSae, setNomSae] = useState('');
   const [descriptionSae, setDescriptionSae] = useState('');
@@ -26,14 +29,13 @@ function App() {
   
   const [quantiteGeneration, setQuantiteGeneration] = useState(10);
   const [adminMessage, setAdminMessage] = useState(null);
-  const [listeUtilisateurs, setListeUtilisateurs] = useState([]); // NOUVEAU : Pour l'admin
+  const [listeUtilisateurs, setListeUtilisateurs] = useState([]); 
 
   const [erreur, setErreur] = useState(null);
   const [succes, setSucces] = useState(null);
   const [saes, setSaes] = useState([]);
   const [triDate, setTriDate] = useState('asc'); 
 
-  // Surveille la connexion et la vue Admin
   useEffect(() => {
     if (token) {
       if (vueActuelle === 'public' || vueActuelle === 'login' || vueActuelle === 'register') {
@@ -41,7 +43,6 @@ function App() {
       }
       saeService.getListeSae(token).then(setSaes).catch(handleLogout);
       
-      // NOUVEAU : Si on ouvre le panneau admin, on charge la liste des comptes !
       if (vueActuelle === 'admin' && role === 'admin') {
          saeService.getAllUsers(token).then(setListeUtilisateurs).catch(e => console.error(e));
       }
@@ -51,13 +52,20 @@ function App() {
     }
   }, [token, vueActuelle, role]);
 
+  const saveAuthData = (data) => {
+    setToken(data.token); setRole(data.role); setPrenomUser(data.prenom); setUserClasse(data.classe);
+    localStorage.setItem('jwtToken', data.token); 
+    localStorage.setItem('userRole', data.role); 
+    localStorage.setItem('userPrenom', data.prenom);
+    localStorage.setItem('userClasse', data.classe); // On sauvegarde ses classes
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setErreur(null);
     try {
       const data = await saeService.login(mail, password);
-      setToken(data.token); setRole(data.role); setPrenomUser(data.prenom);
-      localStorage.setItem('jwtToken', data.token); localStorage.setItem('userRole', data.role); localStorage.setItem('userPrenom', data.prenom);
+      saveAuthData(data);
       setVueActuelle('dashboard');
     } catch (err) { setErreur(err.message); }
   };
@@ -65,11 +73,19 @@ function App() {
   const handleRegister = async (e) => {
     e.preventDefault();
     setErreur(null); setSucces(null);
+    
+    // Si c'est un enseignant, on formate ses classes en texte (JSON)
+    const classeFormattee = roleInscription === 'enseignant' ? JSON.stringify(classesEnseignant) : classeInscription;
+
+    if (roleInscription === 'enseignant' && classesEnseignant.length === 0) {
+        setErreur("Veuillez sélectionner au moins une classe.");
+        return;
+    }
+
     try {
-      await saeService.register({ nom, prenom, mail, password, role: roleInscription, classe: classeInscription });
+      await saeService.register({ nom, prenom, mail, password, role: roleInscription, classe: classeFormattee });
       const data = await saeService.login(mail, password);
-      setToken(data.token); setRole(data.role); setPrenomUser(data.prenom);
-      localStorage.setItem('jwtToken', data.token); localStorage.setItem('userRole', data.role); localStorage.setItem('userPrenom', data.prenom);
+      saveAuthData(data);
       setNom(''); setPrenom(''); setPassword('');
       setVueActuelle('dashboard');
     } catch (err) { setErreur(err.message); }
@@ -105,31 +121,22 @@ function App() {
         const donnees = await saeService.getListeSae(token);
         setSaes(donnees);
       } else if (type === 'users') {
-        // Recharge la liste des utilisateurs générés
         const users = await saeService.getAllUsers(token);
         setListeUtilisateurs(users);
       }
     } catch(err) { setErreur(err.message); }
   };
 
-  // NOUVEAU : Fonction déclenchée lors du clic sur le bouton "Se connecter en tant que..."
   const handleImpersonate = async (userId) => {
     try {
       const data = await saeService.impersonateUser(userId, token);
-      
-      // On remplace nos identifiants actuels par ceux de la personne ciblée
-      setToken(data.token); setRole(data.role); setPrenomUser(data.prenom);
-      localStorage.setItem('jwtToken', data.token); localStorage.setItem('userRole', data.role); localStorage.setItem('userPrenom', data.prenom);
-      
-      // On le renvoie sur le dashboard de cet utilisateur
+      saveAuthData(data);
       setVueActuelle('dashboard');
-    } catch(err) {
-      setErreur(err.message);
-    }
+    } catch(err) { setErreur(err.message); }
   };
 
   const handleLogout = () => {
-    setToken(null); setRole(null); setPrenomUser('');
+    setToken(null); setRole(null); setPrenomUser(''); setUserClasse('');
     localStorage.clear();
     setSaes([]); setVueActuelle('public'); setMail(''); setPassword('');
   };
@@ -174,6 +181,17 @@ function App() {
         </div>
       );
     } catch(e) { return null; }
+  };
+
+  // NOUVEAU : Fonction pour afficher proprement la classe dans le panneau admin
+  const renderClasseFormattee = (classeTexte) => {
+      if (!classeTexte) return "N/A";
+      if (classeTexte.startsWith('[')) {
+          try {
+              return JSON.parse(classeTexte).join(', '); // Transforme ["MMI-A1", "MMI-A2"] en "MMI-A1, MMI-A2"
+          } catch(e) { return classeTexte; }
+      }
+      return classeTexte;
   };
 
   // --- VUES ---
@@ -245,12 +263,35 @@ function App() {
               <option value="etudiant">Étudiant</option>
               <option value="enseignant">Enseignant</option>
             </select>
+            
             {roleInscription === 'etudiant' && (
               <select value={classeInscription} onChange={(e) => setClasseInscription(e.target.value)} style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', flex: 1 }}>
                 {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             )}
           </div>
+
+          {/* NOUVEAU : Sélection MULTIPLE pour les enseignants */}
+          {roleInscription === 'enseignant' && (
+             <div style={{ marginTop: '10px', textAlign: 'left', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', backgroundColor: '#f8fafc' }}>
+               <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text)' }}>Cochez vos classes :</label>
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                 {CLASSES_DISPOS.map(c => (
+                   <label key={c} style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                     <input 
+                       type="checkbox" 
+                       checked={classesEnseignant.includes(c)} 
+                       onChange={(e) => {
+                         if (e.target.checked) setClassesEnseignant([...classesEnseignant, c]);
+                         else setClassesEnseignant(classesEnseignant.filter(cls => cls !== c));
+                       }} 
+                     />
+                     {c}
+                   </label>
+                 ))}
+               </div>
+             </div>
+          )}
 
           <button type="submit" className="btn-primary" style={{ marginTop: '10px' }}>S'inscrire</button>
         </form>
@@ -259,7 +300,14 @@ function App() {
     );
   }
 
+  // --- VUES PROTÉGÉES ---
   if (vueActuelle === 'create-sae') {
+    // NOUVEAU : On décode les classes du prof pour le menu déroulant !
+    let classesDuProf = CLASSES_DISPOS;
+    if (userClasse && userClasse.startsWith('[')) {
+        try { classesDuProf = JSON.parse(userClasse); } catch(e) {}
+    }
+
     return (
       <div className="login-wrapper" style={{ maxWidth: '600px' }}>
         <h1>Créer une nouvelle SAE</h1>
@@ -274,8 +322,9 @@ function App() {
             <div style={{ flex: 1, textAlign: 'left' }}>
               <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Classe ciblée :</label>
               <select value={classeCible} onChange={(e) => setClasseCible(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontFamily: 'inherit' }}>
-                <option value="Toutes">Toutes les classes</option>
-                {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
+                <option value="Toutes">Toutes mes classes</option>
+                {/* On n'affiche QUE les classes attribuées à ce prof ! */}
+                {classesDuProf.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
           </div>
@@ -295,7 +344,6 @@ function App() {
     );
   }
 
-  // PANNEAU ADMIN
   if (vueActuelle === 'admin') {
     return (
       <div className="dashboard-container">
@@ -318,7 +366,6 @@ function App() {
           </div>
         </div>
 
-        {/* NOUVEAU : LA LISTE DES UTILISATEURS AVEC BOUTON DE CONNEXION */}
         <div style={{ backgroundColor: 'white', padding: '2rem', borderRadius: '10px', border: '1px solid #e2e8f0', overflowX: 'auto' }}>
           <h2 style={{ marginTop: 0, color: '#1e293b' }}>Base de données des Comptes</h2>
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem', minWidth: '600px' }}>
@@ -327,7 +374,7 @@ function App() {
                 <th style={{ padding: '10px' }}>Nom</th>
                 <th style={{ padding: '10px' }}>Email</th>
                 <th style={{ padding: '10px' }}>Rôle</th>
-                <th style={{ padding: '10px' }}>Classe</th>
+                <th style={{ padding: '10px' }}>Classe(s)</th>
                 <th style={{ padding: '10px' }}>Action</th>
               </tr>
             </thead>
@@ -341,7 +388,8 @@ function App() {
                         {user.role}
                     </span>
                   </td>
-                  <td style={{ padding: '10px' }}>{user.classe}</td>
+                  {/* Utilisation de la fonction de formatage pour les classes multiples */}
+                  <td style={{ padding: '10px', fontSize: '0.9rem' }}>{renderClasseFormattee(user.classe)}</td>
                   <td style={{ padding: '10px' }}>
                     {user.role !== 'admin' && (
                         <button 
@@ -364,7 +412,6 @@ function App() {
     );
   }
 
-  // TABLEAU DE BORD STANDARD
   const saesAfficheesDash = getSaesTriees(saes); 
   
   return (
