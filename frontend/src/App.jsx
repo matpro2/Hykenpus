@@ -9,7 +9,7 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('jwtToken') || null);
   const [role, setRole] = useState(localStorage.getItem('userRole') || null);
   const [prenomUser, setPrenomUser] = useState(localStorage.getItem('userPrenom') || '');
-  const [userClasse, setUserClasse] = useState(localStorage.getItem('userClasse') || ''); // NOUVEAU: on garde en mémoire sa classe
+  const [userClasse, setUserClasse] = useState(localStorage.getItem('userClasse') || ''); 
   const [vueActuelle, setVueActuelle] = useState('public');
 
   const [mail, setMail] = useState('');
@@ -18,8 +18,12 @@ function App() {
   const [prenom, setPrenom] = useState('');
   const [roleInscription, setRoleInscription] = useState('etudiant');
   
-  const [classeInscription, setClasseInscription] = useState(CLASSES_DISPOS[0]); // Étudiant
-  const [classesEnseignant, setClassesEnseignant] = useState([]); // NOUVEAU: Multiples classes pour le prof
+  const [classeInscription, setClasseInscription] = useState(CLASSES_DISPOS[0]); 
+  const [classesEnseignant, setClassesEnseignant] = useState([]); 
+
+  // États pour la page Profil
+  const [profilData, setProfilData] = useState({ nom: '', prenom: '', mail: '', classeEtudiant: '', classesEns: [] });
+  const [profilMessage, setProfilMessage] = useState(null);
 
   const [nomSae, setNomSae] = useState('');
   const [descriptionSae, setDescriptionSae] = useState('');
@@ -47,7 +51,7 @@ function App() {
          saeService.getAllUsers(token).then(setListeUtilisateurs).catch(e => console.error(e));
       }
     } else {
-      setVueActuelle(prev => (prev === 'dashboard' || prev === 'create-sae' || prev === 'admin') ? 'public' : prev);
+      setVueActuelle(prev => (prev === 'dashboard' || prev === 'create-sae' || prev === 'admin' || prev === 'profile') ? 'public' : prev);
       saeService.getPublicListeSae().then(setSaes).catch(console.error);
     }
   }, [token, vueActuelle, role]);
@@ -57,7 +61,7 @@ function App() {
     localStorage.setItem('jwtToken', data.token); 
     localStorage.setItem('userRole', data.role); 
     localStorage.setItem('userPrenom', data.prenom);
-    localStorage.setItem('userClasse', data.classe); // On sauvegarde ses classes
+    localStorage.setItem('userClasse', data.classe); 
   };
 
   const handleLogin = async (e) => {
@@ -73,8 +77,6 @@ function App() {
   const handleRegister = async (e) => {
     e.preventDefault();
     setErreur(null); setSucces(null);
-    
-    // Si c'est un enseignant, on formate ses classes en texte (JSON)
     const classeFormattee = roleInscription === 'enseignant' ? JSON.stringify(classesEnseignant) : classeInscription;
 
     if (roleInscription === 'enseignant' && classesEnseignant.length === 0) {
@@ -91,6 +93,44 @@ function App() {
     } catch (err) { setErreur(err.message); }
   };
 
+  // NOUVEAU : Fonction pour ouvrir la page profil et pré-remplir les données
+  const openProfilePage = async () => {
+      setErreur(null); setProfilMessage(null);
+      try {
+          const data = await saeService.getMyProfile(token);
+          let classesEns = [];
+          let classeEtu = CLASSES_DISPOS[0];
+          
+          if (data.role === 'enseignant' || data.role === 'admin') {
+              try { classesEns = JSON.parse(data.classe); } catch(e) {}
+          } else {
+              classeEtu = data.classe;
+          }
+          
+          setProfilData({ nom: data.nom, prenom: data.prenom, mail: data.mail, classeEtudiant: classeEtu, classesEns: classesEns });
+          setVueActuelle('profile');
+      } catch(err) { setErreur(err.message); }
+  };
+
+  // NOUVEAU : Sauvegarder les modifications du profil
+  const handleUpdateProfile = async (e) => {
+      e.preventDefault();
+      setErreur(null); setProfilMessage(null);
+
+      const classeFormattee = (role === 'enseignant' || role === 'admin') ? JSON.stringify(profilData.classesEns) : profilData.classeEtudiant;
+      
+      if ((role === 'enseignant' || role === 'admin') && profilData.classesEns.length === 0) {
+          setErreur("Vous devez avoir au moins une classe.");
+          return;
+      }
+
+      try {
+          const data = await saeService.updateProfile({ nom: profilData.nom, prenom: profilData.prenom, mail: profilData.mail, classe: classeFormattee }, token);
+          saveAuthData(data); // Met à jour le Token dans React et le LocalStorage
+          setProfilMessage(data.message);
+      } catch(err) { setErreur(err.message); }
+  };
+
   const handleCreateSae = async (e) => {
     e.preventDefault();
     setErreur(null);
@@ -100,7 +140,6 @@ function App() {
       formData.append('description', descriptionSae);
       formData.append('date_rendu', dateRenduSae); 
       formData.append('classe_cible', classeCible); 
-      
       fichiersSae.forEach(fichier => formData.append('fichiers', fichier));
 
       await saeService.createSae(formData, token);
@@ -183,13 +222,10 @@ function App() {
     } catch(e) { return null; }
   };
 
-  // NOUVEAU : Fonction pour afficher proprement la classe dans le panneau admin
   const renderClasseFormattee = (classeTexte) => {
       if (!classeTexte) return "N/A";
       if (classeTexte.startsWith('[')) {
-          try {
-              return JSON.parse(classeTexte).join(', '); // Transforme ["MMI-A1", "MMI-A2"] en "MMI-A1, MMI-A2"
-          } catch(e) { return classeTexte; }
+          try { return JSON.parse(classeTexte).join(', '); } catch(e) { return classeTexte; }
       }
       return classeTexte;
   };
@@ -263,7 +299,6 @@ function App() {
               <option value="etudiant">Étudiant</option>
               <option value="enseignant">Enseignant</option>
             </select>
-            
             {roleInscription === 'etudiant' && (
               <select value={classeInscription} onChange={(e) => setClasseInscription(e.target.value)} style={{ padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', flex: 1 }}>
                 {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
@@ -271,7 +306,6 @@ function App() {
             )}
           </div>
 
-          {/* NOUVEAU : Sélection MULTIPLE pour les enseignants */}
           {roleInscription === 'enseignant' && (
              <div style={{ marginTop: '10px', textAlign: 'left', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', backgroundColor: '#f8fafc' }}>
                <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '0.9rem', color: 'var(--text)' }}>Cochez vos classes :</label>
@@ -300,9 +334,68 @@ function App() {
     );
   }
 
-  // --- VUES PROTÉGÉES ---
+  // --- VUE PROFIL (MON COMPTE) ---
+  if (vueActuelle === 'profile') {
+    return (
+      <div className="login-wrapper" style={{ maxWidth: '600px' }}>
+        <h1 style={{ color: 'var(--primary)' }}>👤 Mon Compte</h1>
+        {profilMessage && <div style={{ padding: '10px', backgroundColor: '#dcfce3', color: '#166534', borderRadius: '5px', marginBottom: '1rem', fontWeight: 'bold' }}>{profilMessage}</div>}
+        
+        <form onSubmit={handleUpdateProfile}>
+          {erreur && <p style={{ color: 'var(--danger)', fontWeight: '500' }}>{erreur}</p>}
+          
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <div style={{ flex: 1, textAlign: 'left' }}>
+               <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Prénom :</label>
+               <input type="text" value={profilData.prenom} onChange={(e) => setProfilData({...profilData, prenom: e.target.value})} required style={{ marginTop: '5px' }}/>
+            </div>
+            <div style={{ flex: 1, textAlign: 'left' }}>
+               <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Nom :</label>
+               <input type="text" value={profilData.nom} onChange={(e) => setProfilData({...profilData, nom: e.target.value})} required style={{ marginTop: '5px' }}/>
+            </div>
+          </div>
+          
+          <div style={{ textAlign: 'left', marginTop: '10px' }}>
+             <label style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>Adresse e-mail :</label>
+             <input type="email" value={profilData.mail} onChange={(e) => setProfilData({...profilData, mail: e.target.value})} required style={{ marginTop: '5px' }} />
+          </div>
+
+          <div style={{ marginTop: '15px', textAlign: 'left', padding: '1rem', borderRadius: '8px', border: '1px solid var(--border)', backgroundColor: '#f8fafc' }}>
+            <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', color: 'var(--primary)' }}>Ma classe / Mes classes :</label>
+            
+            {role === 'etudiant' ? (
+                <select value={profilData.classeEtudiant} onChange={(e) => setProfilData({...profilData, classeEtudiant: e.target.value})} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                  {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+            ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  {CLASSES_DISPOS.map(c => (
+                    <label key={c} style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={profilData.classesEns.includes(c)} 
+                        onChange={(e) => {
+                          if (e.target.checked) setProfilData({...profilData, classesEns: [...profilData.classesEns, c]});
+                          else setProfilData({...profilData, classesEns: profilData.classesEns.filter(cls => cls !== c)});
+                        }} 
+                      />
+                      {c}
+                    </label>
+                  ))}
+                </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+            <button type="submit" className="btn-primary" style={{ flex: 1 }}>Enregistrer les modifications</button>
+            <button type="button" onClick={() => setVueActuelle('dashboard')} className="btn-primary" style={{ background: 'white', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>Retour</button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   if (vueActuelle === 'create-sae') {
-    // NOUVEAU : On décode les classes du prof pour le menu déroulant !
     let classesDuProf = CLASSES_DISPOS;
     if (userClasse && userClasse.startsWith('[')) {
         try { classesDuProf = JSON.parse(userClasse); } catch(e) {}
@@ -323,7 +416,6 @@ function App() {
               <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>Classe ciblée :</label>
               <select value={classeCible} onChange={(e) => setClasseCible(e.target.value)} style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border)', fontFamily: 'inherit' }}>
                 <option value="Toutes">Toutes mes classes</option>
-                {/* On n'affiche QUE les classes attribuées à ce prof ! */}
                 {classesDuProf.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -388,7 +480,6 @@ function App() {
                         {user.role}
                     </span>
                   </td>
-                  {/* Utilisation de la fonction de formatage pour les classes multiples */}
                   <td style={{ padding: '10px', fontSize: '0.9rem' }}>{renderClasseFormattee(user.classe)}</td>
                   <td style={{ padding: '10px' }}>
                     {user.role !== 'admin' && (
@@ -412,6 +503,7 @@ function App() {
     );
   }
 
+  // --- TABLEAU DE BORD STANDARD ---
   const saesAfficheesDash = getSaesTriees(saes); 
   
   return (
@@ -420,7 +512,9 @@ function App() {
         <h1>Suivi des SAE</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <span style={{ fontWeight: 'bold' }}>Bonjour, {prenomUser}</span>
-          <button onClick={handleLogout} className="btn-logout">Déconnexion</button>
+          {/* NOUVEAU : LE BOUTON MON COMPTE */}
+          <button onClick={openProfilePage} className="btn-primary" style={{ background: 'white', color: 'var(--primary)', border: '1px solid var(--primary)', padding: '8px 15px', margin: 0 }}>👤 Mon Compte</button>
+          <button onClick={handleLogout} className="btn-logout" style={{ margin: 0 }}>Déconnexion</button>
         </div>
       </div>
       

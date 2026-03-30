@@ -73,7 +73,6 @@ export const saeService = {
     return data;
   },
 
-  // NOUVEAU : Récupérer tous les utilisateurs
   getAllUsers: async (token) => {
     const response = await fetch(`${API_BASE_URL}/admin/users`, {
       headers: { 'Authorization': `Bearer ${token}` }
@@ -82,7 +81,6 @@ export const saeService = {
     return await response.json();
   },
 
-  // NOUVEAU : Usurper une identité
   impersonateUser: async (userId, token) => {
     const response = await fetch(`${API_BASE_URL}/admin/impersonate`, {
       method: 'POST',
@@ -93,7 +91,30 @@ export const saeService = {
       body: JSON.stringify({ userId })
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.message || "Impossible de se connecter à ce compte");
+    if (!response.ok) throw new Error(data.message || "Impossible de se connecter");
+    return data;
+  },
+
+  // --- NOUVELLES FONCTIONS PROFIL ---
+  getMyProfile: async (token) => {
+    const response = await fetch(`${API_BASE_URL}/users/me`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error("Impossible de charger le profil");
+    return await response.json();
+  },
+
+  updateProfile: async (profileData, token) => {
+    const response = await fetch(`${API_BASE_URL}/users/me`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify(profileData)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Échec de la mise à jour");
     return data;
   }
 };
