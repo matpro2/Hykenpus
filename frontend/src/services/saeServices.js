@@ -4,7 +4,6 @@ export const SERVER_URL = 'https://didactic-fortnight-r47xp459jq9535477-8000.app
 const API_BASE_URL = `${SERVER_URL}/api`; 
 
 export const saeService = {
-  
   getPublicListeSae: async () => {
     const response = await fetch(`${API_BASE_URL}/public/sae`);
     if (!response.ok) throw new Error("Erreur de chargement");
@@ -60,7 +59,6 @@ export const saeService = {
     return await response.json();
   },
 
-  // NOUVEAU : Fonction spéciale pour l'admin
   generateMockData: async (type, count, token) => {
     const response = await fetch(`${API_BASE_URL}/admin/generate`, {
       method: 'POST',
@@ -72,6 +70,30 @@ export const saeService = {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || "Échec de la génération");
+    return data;
+  },
+
+  // NOUVEAU : Récupérer tous les utilisateurs
+  getAllUsers: async (token) => {
+    const response = await fetch(`${API_BASE_URL}/admin/users`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error("Erreur lors de la récupération des utilisateurs");
+    return await response.json();
+  },
+
+  // NOUVEAU : Usurper une identité
+  impersonateUser: async (userId, token) => {
+    const response = await fetch(`${API_BASE_URL}/admin/impersonate`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ userId })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Impossible de se connecter à ce compte");
     return data;
   }
 };

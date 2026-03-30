@@ -46,7 +46,7 @@ async function initDB() {
             mail TEXT UNIQUE NOT NULL,
             mot_de_passe TEXT NOT NULL,
             role TEXT NOT NULL,
-            classe TEXT -- NOUVEAU : La classe de l'étudiant
+            classe TEXT
         );
         
         CREATE TABLE IF NOT EXISTS SAE (
@@ -57,7 +57,7 @@ async function initDB() {
             date_creation TEXT,
             documents TEXT,
             date_rendu TEXT,
-            classe_cible TEXT, -- NOUVEAU : À quelle classe s'adresse cette SAE ?
+            classe_cible TEXT,
             FOREIGN KEY (auteur_id) REFERENCES Comptes(id) ON DELETE CASCADE
         );
     `);
@@ -70,7 +70,7 @@ async function initDB() {
             ['Système', 'Admin', 'Admin', hashedAdminPw, 'admin', 'Toutes']
         );
     }
-    console.log("✅ Base de données locale prête (Avec système de Classes) !");
+    console.log("✅ Base de données locale prête !");
 }
 initDB();
 
@@ -87,14 +87,12 @@ app.get('/api/public/sae', async (req, res) => {
 });
 
 app.post('/api/register', async (req, res) => {
-    // On récupère la classe envoyée par le formulaire
     const { nom, prenom, mail, password, role, classe } = req.body;
     try {
         const existingUsers = await db.all('SELECT * FROM Comptes WHERE mail = ?', [mail]);
         if (existingUsers.length > 0) return res.status(400).json({ message: "Cet email est déjà utilisé" });
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        // Si c'est un enseignant, sa classe par défaut est 'Toutes'
         const classeUser = role === 'enseignant' ? 'Toutes' : (classe || 'MMI-A1');
 
         await db.run(
@@ -136,20 +134,15 @@ const verifierToken = (req, res, next) => {
     });
 };
 
-// NOUVEAU : LE FILTRE INTELLIGENT PAR RÔLE ET CLASSE
 app.get('/api/sae', verifierToken, async (req, res) => {
     try {
         if (req.user.role === 'admin') {
-            // L'admin voit absolument TOUT
             const rows = await db.all('SELECT * FROM SAE');
             return res.json(rows);
         } else if (req.user.role === 'enseignant') {
-            // L'enseignant voit uniquement les SAEs qu'IL a publiées
             const rows = await db.all('SELECT * FROM SAE WHERE auteur_id = ?', [req.user.id]);
             return res.json(rows);
         } else {
-            // L'étudiant voit les SAEs destinées à SA classe OU à 'Toutes'
-            // On re-cherche sa classe exacte en BDD par sécurité
             const userDb = await db.get('SELECT classe FROM Comptes WHERE id = ?', [req.user.id]);
             const rows = await db.all('SELECT * FROM SAE WHERE classe_cible = ? OR classe_cible = ?', [userDb.classe, 'Toutes']);
             return res.json(rows);
@@ -182,7 +175,9 @@ app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, re
     }
 });
 
-// ROUTE DE GÉNÉRATION ADMIN
+// --- NOUVELLES ROUTES ADMIN ---
+
+// 1. Génération de fausses données (Mock)
 app.post('/api/admin/generate', verifierToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ message: "Accès refusé. Réservé à l'Admin." });
     
@@ -201,11 +196,11 @@ app.post('/api/admin/generate', verifierToken, async (req, res) => {
                 const role = Math.random() > 0.8 ? 'enseignant' : 'etudiant'; 
                 const mail = `${p.toLowerCase()}.${n.toLowerCase()}${Math.floor(Math.random()*1000)}@test.fr`;
                 const pwd = await bcrypt.hash('password123', 10);
-                const classe = role === 'enseignant' ? 'Toutes' : classesList[Math.floor(Math.random() * 4)]; // 4 premières
+                const classe = role === 'enseignant' ? 'Toutes' : classesList[Math.floor(Math.random() * 4)];
                 
                 await db.run('INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role, classe) VALUES (?, ?, ?, ?, ?, ?)', [n, p, mail, pwd, role, classe]);
             }
-            res.json({ message: `✅ ${limit} comptes générés avec succès ! (Mdp: password123)` });
+            res.json({ message: `✅ ${limit} comptes générés avec succès !` });
         
         } else if (type === 'saes') {
             const profs = await db.all('SELECT id FROM Comptes WHERE role = "enseignant"');
@@ -234,6 +229,37 @@ app.post('/api/admin/generate', verifierToken, async (req, res) => {
         }
     } catch (error) {
         res.status(500).json({ message: "Erreur lors de la génération." });
+    }
+});
+
+// 2. Récupérer TOUS les utilisateurs pour l'interface Admin
+app.get('/api/admin/users', verifierToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: "Accès refusé." });
+    try {
+        // On ne renvoie surtout pas le mot de passe !
+        const users = await db.all('SELECT id, nom, prenom, mail, role, classe FROM Comptes ORDER BY id DESC');
+        res.json(users);
+    } catch (error) {
+        res.status(500).json({ message: "Erreur lors de la récupération des utilisateurs." });
+    }
+});
+
+// 3. Forcer la connexion sur le compte d'un autre utilisateur (Impersonate)
+app.post('/api/admin/impersonate', verifierToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: "Accès refusé." });
+    
+    const { userId } = req.body;
+    try {
+        const user = await db.get('SELECT * FROM Comptes WHERE id = ?', [userId]);
+        if (!user) return res.status(404).json({ message: "Utilisateur introuvable." });
+
+        // On crée un nouveau Token au nom de cet utilisateur (sans demander le mot de passe !)
+        const token = jwt.sign({ id: user.id, mail: user.mail, role: user.role, classe: user.classe }, SECRET_KEY, { expiresIn: '2h' });
+        
+        // On renvoie les infos de connexion
+        res.json({ token, role: user.role, nom: user.nom, prenom: user.prenom, classe: user.classe });
+    } catch (error) {
+        res.status(500).json({ message: "Erreur lors du changement de compte." });
     }
 });
 
