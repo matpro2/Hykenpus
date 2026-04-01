@@ -115,6 +115,18 @@ export const saeService = {
     if (!response.ok) throw new Error("Erreur lors de la récupération des étudiants");
     return await response.json();
   },
+
+  adminCreateUser: async (userData, token) => {
+    const response = await fetch(`${API_BASE_URL}/admin/create-user`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify(userData)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Erreur lors de la création");
+    return data;
+  },
+  
   updateEtudiantClasse: async (etudiantId, nouvelleClasse, token) => {
     const response = await fetch(`${API_BASE_URL}/enseignant/etudiants/${etudiantId}/classe`, {
       method: 'PUT',
@@ -124,4 +136,4 @@ export const saeService = {
     if (!response.ok) throw new Error("Échec de l'assignation");
     return await response.json();
   }
-};
+}

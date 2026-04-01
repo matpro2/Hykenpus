@@ -45,6 +45,14 @@ function App() {
   const [etudiants, setEtudiants] = useState([]);
   const [classeGeree, setClasseGeree] = useState('');
 
+  // NOUVEAU : États pour la création manuelle d'un compte (Panel Admin)
+  const [adminNewNom, setAdminNewNom] = useState('');
+  const [adminNewPrenom, setAdminNewPrenom] = useState('');
+  const [adminNewMail, setAdminNewMail] = useState('');
+  const [adminNewPwd, setAdminNewPwd] = useState('');
+  const [adminNewRole, setAdminNewRole] = useState('enseignant');
+  const [adminNewClasses, setAdminNewClasses] = useState([]);
+
   const [quantiteGeneration, setQuantiteGeneration] = useState(10);
   const [adminMessage, setAdminMessage] = useState(null);
   const [listeUtilisateurs, setListeUtilisateurs] = useState([]); 
@@ -185,6 +193,24 @@ if (token) {
           const data = await saeService.getEtudiants(token);
           setEtudiants(data);
       } catch(err) { setErreur(err.message); }
+  };
+
+  // NOUVEAU : Soumettre le formulaire de création manuelle (Admin)
+  const handleAdminCreateUser = async (e) => {
+    e.preventDefault(); setErreur(null); setAdminMessage(null);
+    if (adminNewRole === 'enseignant' && adminNewClasses.length === 0) return setErreur("Sélectionnez au moins une classe pour ce professeur.");
+    
+    try {
+       await saeService.adminCreateUser({
+           nom: adminNewNom, prenom: adminNewPrenom, mail: adminNewMail, 
+           password: adminNewPwd, role: adminNewRole, 
+           classes: adminNewRole === 'enseignant' ? adminNewClasses : adminNewClasses[0] || CLASSES_DISPOS[0]
+       }, token);
+       setAdminMessage("Compte créé avec succès !");
+       setAdminNewNom(''); setAdminNewPrenom(''); setAdminNewMail(''); setAdminNewPwd(''); setAdminNewClasses([]);
+       const users = await saeService.getAllUsers(token);
+       setListeUtilisateurs(users);
+    } catch(err) { setErreur(err.message); }
   };
 
   const handleGenerate = async (type) => {
@@ -565,44 +591,26 @@ if (token) {
             </div>
           )}
 
+{/* VUE : REGISTER (MODIFIÉE POUR ÉTUDIANTS UNIQUEMENT) */}
           {vueActuelle === 'register' && (
             <div className="form-card-container">
               <div className="card form-card">
-                <h2>Créer un compte</h2>
+                <h2>Créer un compte étudiant</h2>
                 <form onSubmit={handleRegister}>
                   <div className="form-row">
                     <input type="text" placeholder="Prénom" value={prenom} onChange={(e) => setPrenom(e.target.value)} required />
                     <input type="text" placeholder="Nom" value={nom} onChange={(e) => setNom(e.target.value)} required />
                   </div>
                   <input type="email" placeholder="Adresse Email" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} required />
-                  <input type="password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" />
-                  <div className="form-row">
-                    <select value={roleInscription} onChange={(e) => setRoleInscription(e.target.value)}>
-                      <option value="etudiant">Étudiant</option>
-                      <option value="enseignant">Enseignant</option>
+                  <input type="password" placeholder="Mot de passe (6+ car.)" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" />
+                  
+                  <div className="form-group" style={{marginTop: '10px'}}>
+                    <label>Sélectionnez votre classe :</label>
+                    <select value={classeInscription} onChange={(e) => setClasseInscription(e.target.value)}>
+                      {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
-                    {roleInscription === 'etudiant' && (
-                      <select value={classeInscription} onChange={(e) => setClasseInscription(e.target.value)}>
-                        {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    )}
                   </div>
                   
-                  {roleInscription === 'enseignant' && (
-                     <div style={{ marginTop: '10px', textAlign: 'left', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
-                       <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '0.9rem' }}>Cochez vos classes :</label>
-                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                         {CLASSES_DISPOS.map(c => (
-                           <label key={c} style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                             <input type="checkbox" checked={classesEnseignant.includes(c)} onChange={(e) => {
-                                 if (e.target.checked) setClassesEnseignant([...classesEnseignant, c]);
-                                 else setClassesEnseignant(classesEnseignant.filter(cls => cls !== c));
-                               }} /> {c}
-                           </label>
-                         ))}
-                       </div>
-                     </div>
-                  )}
                   <button type="submit" className="btn-download" style={{marginTop:'15px'}}>S'inscrire</button>
                 </form>
                 <button onClick={() => setVueActuelle('login')} className="btn-secondary" style={{marginTop: '1rem', width: '100%'}}>Déjà inscrit ?</button>
@@ -683,7 +691,7 @@ if (token) {
               </div>
             </div>
           )}
-          
+
           {vueActuelle === 'edit-sae' && (
             <div className="form-card-container">
               <div className="card form-card" style={{maxWidth:'600px'}}>
@@ -785,7 +793,54 @@ if (token) {
                   <button onClick={() => handleGenerate('saes')} className="btn-secondary">📚 Générer SAEs</button>
                 </div>
               </div>
+              {/* NOUVEAU : FORMULAIRE DE CRÉATION MANUELLE ADMIN */}
+              <div className="card" style={{marginBottom: '2rem'}}>
+                <h2>Créer un compte manuellement</h2>
+                <p className="text-muted" style={{marginBottom:'1rem'}}>Permet de créer un compte Enseignant (ou Étudiant sur mesure).</p>
+                <form onSubmit={handleAdminCreateUser}>
+                   <div className="form-row">
+                      <input type="text" placeholder="Prénom" value={adminNewPrenom} onChange={e => setAdminNewPrenom(e.target.value)} required style={{flex: 1}}/>
+                      <input type="text" placeholder="Nom" value={adminNewNom} onChange={e => setAdminNewNom(e.target.value)} required style={{flex: 1}}/>
+                   </div>
+                   <div className="form-row">
+                      <input type="email" placeholder="Email de connexion" value={adminNewMail} onChange={e => setAdminNewMail(e.target.value)} required style={{flex: 1}}/>
+                      <input type="text" placeholder="Mot de passe provisoire" value={adminNewPwd} onChange={e => setAdminNewPwd(e.target.value)} required style={{flex: 1}}/>
+                   </div>
+                   
+                   <div className="form-group" style={{marginTop: '10px'}}>
+                      <label>Rôle du compte :</label>
+                      <select value={adminNewRole} onChange={e => setAdminNewRole(e.target.value)}>
+                         <option value="enseignant">Professeur / Enseignant</option>
+                         <option value="etudiant">Étudiant</option>
+                      </select>
+                   </div>
 
+                   {adminNewRole === 'enseignant' ? (
+                      <div className="form-group">
+                         <label>Classes gérées par ce professeur :</label>
+                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '10px', backgroundColor: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '8px'}}>
+                           {CLASSES_DISPOS.map(c => (
+                             <label key={c} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                               <input type="checkbox" checked={adminNewClasses.includes(c)} onChange={(e) => {
+                                   if (e.target.checked) setAdminNewClasses([...adminNewClasses, c]);
+                                   else setAdminNewClasses(adminNewClasses.filter(cls => cls !== c));
+                                 }} /> {c}
+                             </label>
+                           ))}
+                         </div>
+                      </div>
+                   ) : (
+                      <div className="form-group">
+                         <label>Classe de l'élève :</label>
+                         <select value={adminNewClasses[0] || CLASSES_DISPOS[0]} onChange={e => setAdminNewClasses([e.target.value])}>
+                           {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
+                         </select>
+                      </div>
+                   )}
+
+                   <button type="submit" className="btn-secondary" style={{marginTop: '10px'}}>Créer le compte</button>
+                </form>
+              </div>
               <div className="card">
                 <h2>Base de données des Comptes</h2>
                 <div style={{overflowX: 'auto'}}>

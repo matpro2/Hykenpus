@@ -108,17 +108,18 @@ app.get('/api/public/sae', async (req, res) => {
 });
 
 app.post('/api/register', async (req, res) => {
-    const { nom, prenom, mail, password, role, classe } = req.body;
+    // On ignore le "role" que pourrait envoyer le formulaire, on force 'etudiant'
+    const { nom, prenom, mail, password, classe } = req.body;
     try {
         const existingUsers = await db.all('SELECT * FROM Comptes WHERE mail = ?', [mail]);
         if (existingUsers.length > 0) return res.status(400).json({ message: "Cet email est déjà utilisé" });
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const classeUser = classe || (role === 'enseignant' ? '[]' : 'MMI-A1');
+        const classeUser = classe || 'MMI-A1';
 
         await db.run(
             'INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role, classe) VALUES (?, ?, ?, ?, ?, ?)',
-            [nom, prenom, mail, hashedPassword, role || 'etudiant', classeUser]
+            [nom, prenom, mail, hashedPassword, 'etudiant', classeUser]
         );
         res.status(201).json({ message: "Compte créé avec succès !" });
     } catch (error) {
@@ -264,6 +265,29 @@ app.post('/api/sae/:id/rendu', verifierToken, upload.array('fichiers', 5), async
         res.status(201).json({ message: "Travail rendu avec succès !" });
     } catch (error) {
         res.status(500).json({ message: "Erreur lors du rendu" });
+    }
+});
+
+// NOUVEAU : Création manuelle d'un compte (ex: Enseignant) par l'Admin
+app.post('/api/admin/create-user', verifierToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: "Accès refusé." });
+    
+    const { nom, prenom, mail, password, role, classes } = req.body;
+    try {
+        const existing = await db.get('SELECT id FROM Comptes WHERE mail = ?', [mail]);
+        if (existing) return res.status(400).json({ message: "Email déjà utilisé." });
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        // Si c'est un enseignant, on sauvegarde son tableau de classes en JSON
+        const classeUser = role === 'enseignant' ? JSON.stringify(classes || []) : (classes || 'MMI-A1');
+
+        await db.run(
+            'INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role, classe) VALUES (?, ?, ?, ?, ?, ?)',
+            [nom, prenom, mail, hashedPassword, role, classeUser]
+        );
+        res.status(201).json({ message: "Compte créé avec succès par l'Admin !" });
+    } catch (error) {
+        res.status(500).json({ message: "Erreur serveur" });
     }
 });
 
