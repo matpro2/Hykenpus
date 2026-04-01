@@ -17,3 +17,4 @@ SaeService.js -> export const SERVER_URL = '[codespace]-8000.app.github.dev';
 
 -- edit database
 supprimer mmi-hub.sqlite pour eviter les incoherance
+qwtel.sqlite-viewer

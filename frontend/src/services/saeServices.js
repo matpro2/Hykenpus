@@ -1,6 +1,6 @@
 // frontend/src/services/saeServices.js
 
-export const SERVER_URL = 'https://literate-space-goldfish-976xj7gp99x7fp996-8000.app.github.dev';
+export const SERVER_URL = 'https://humble-space-sniffle-x5r4v5g6j6g53rv-8000.app.github.dev';
 const API_BASE_URL = `${SERVER_URL}/api`; 
 
 export const saeService = {

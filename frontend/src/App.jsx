@@ -749,6 +749,75 @@ function App() {
                   </table>
                 </div>
               </div>
+
+              {/* NOUVEAU : PANNEAU DE VALIDATION DES SAES */}
+              <div className="card" style={{marginTop: '2rem'}}>
+                <h2><i className="fa-solid fa-list-check" style={{marginRight: '10px'}}></i> Validation des SAEs</h2>
+                <div style={{overflowX: 'auto', marginTop:'15px'}}>
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Sujet SAE</th>
+                        <th>Auteur / Cible</th>
+                        <th>Statut</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {saes.map(sae => {
+                        // On cherche le nom de l'enseignant pour l'afficher joliment
+                        const auteur = listeUtilisateurs.find(u => u.id === sae.auteur_id);
+                        const nomAuteur = auteur ? `${auteur.prenom} ${auteur.nom}` : `Prof ID: ${sae.auteur_id}`;
+
+                        return (
+                          <tr key={sae.id}>
+                            <td>
+                              <div style={{fontWeight:'600'}}>{sae.nom}</div>
+                              <div style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>
+                                <i className="fa-solid fa-calendar" style={{marginRight: '5px'}}></i> 
+                                Rendu : {formatDateTime(sae.date_rendu) || 'Aucune date'}
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{fontSize:'0.9rem', marginBottom: '4px'}}>
+                                <i className="fa-solid fa-user-tie" style={{marginRight: '5px'}}></i> {nomAuteur}
+                              </div>
+                              <span className="badge badge-primary">{sae.classe_cible}</span>
+                            </td>
+                            <td>
+                              {sae.statut === 'validee' ? (
+                                  <span className="badge badge-success"><i className="fa-solid fa-check" style={{marginRight: '5px'}}></i> Validée</span>
+                              ) : (
+                                  <span className="badge badge-warning"><i className="fa-solid fa-clock" style={{marginRight: '5px'}}></i> En attente</span>
+                              )}
+                            </td>
+                            <td>
+                              <div style={{display:'flex', gap:'5px'}}>
+                                <button onClick={() => openSaeDetails(sae.id)} className="btn-secondary" style={{padding:'5px 10px'}} title="Voir le détail de la SAE">
+                                  <i className="fa-solid fa-eye"></i>
+                                </button>
+                                {sae.statut !== 'validee' && (
+                                  <button onClick={(e) => handleValidateSae(sae.id, e)} className="btn-primary" style={{padding:'5px 10px'}} title="Valider et publier">
+                                    <i className="fa-solid fa-check-double" style={{marginRight: '5px'}}></i> Valider
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {saes.length === 0 && (
+                        <tr>
+                          <td colSpan="4" style={{textAlign: 'center', padding: '1rem', color: 'var(--text-muted)'}}>
+                            Aucune SAE dans le système.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
             </div>
           )}
 
