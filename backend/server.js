@@ -58,6 +58,7 @@ async function initDB() {
             documents TEXT,
             date_rendu TEXT,
             classe_cible TEXT,
+            statut TEXT DEFAULT 'validee', -- NOUVEAU : Statut de validation
             FOREIGN KEY (auteur_id) REFERENCES Comptes(id) ON DELETE CASCADE
         );
 
@@ -94,8 +95,35 @@ async function initDB() {
     console.log("✅ Base de données locale prête !");
 }
 
-// --- INITIALISATION SECURISEE ---
-// Le serveur ne démarrera pas tant que la BDD n'est pas chargée.
+// NOUVEAU : Valider une SAE
+app.put('/api/admin/sae/:id/validate', verifierToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: "Refusé." });
+    try {
+        await db.run("UPDATE SAE SET statut = 'validee' WHERE id = ?", [req.params.id]);
+        res.json({ message: "SAE validée !" });
+    } catch (error) { res.status(500).json({ message: "Erreur" }); }
+});
+
+// NOUVEAU : Modifier un compte existant
+app.put('/api/admin/users/:id', verifierToken, async (req, res) => {
+    if (req.user.role !== 'admin') return res.status(403).json({ message: "Refusé." });
+    const { nom, prenom, mail, password, role, classes } = req.body;
+    try {
+        const existing = await db.get('SELECT id FROM Comptes WHERE mail = ? AND id != ?', [mail, req.params.id]);
+        if (existing) return res.status(400).json({ message: "Email déjà utilisé." });
+        
+        const classeUser = role === 'enseignant' ? JSON.stringify(classes || []) : (classes || 'MMI-A1');
+        
+        if (password) {
+            const hashedPassword = await bcrypt.hash(password, 10);
+            await db.run('UPDATE Comptes SET nom=?, prenom=?, mail=?, mot_de_passe=?, role=?, classe=? WHERE id=?', [nom, prenom, mail, hashedPassword, role, classeUser, req.params.id]);
+        } else {
+            await db.run('UPDATE Comptes SET nom=?, prenom=?, mail=?, role=?, classe=? WHERE id=?', [nom, prenom, mail, role, classeUser, req.params.id]);
+        }
+        res.json({ message: "Compte mis à jour !" });
+    } catch (error) { res.status(500).json({ message: "Erreur" }); }
+});
+
 initDB().then(() => {
     app.listen(PORT, () => {
         console.log(`🚀 Serveur démarré sur le port ${PORT}`);
@@ -174,17 +202,16 @@ app.get('/api/sae', verifierToken, async (req, res) => {
                 SELECT SAE.*, 
                        (SELECT COUNT(*) FROM Rendus WHERE Rendus.sae_id = SAE.id) AS nb_rendus,
                        (SELECT COUNT(*) FROM Comptes WHERE role = 'etudiant' AND (Comptes.classe = SAE.classe_cible OR SAE.classe_cible = 'Toutes')) AS nb_etudiants_cibles
-                FROM SAE 
-                WHERE auteur_id = ?
+                FROM SAE WHERE auteur_id = ?
             `, [req.user.id]);
             return res.json(rows);
         } else {
             const userDb = await db.get('SELECT classe FROM Comptes WHERE id = ?', [req.user.id]);
+            // NOUVEAU : On filtre pour que l'étudiant ne voie QUE les SAE validées
             const rows = await db.all(`
                 SELECT SAE.*, Rendus.id AS rendu_id, Rendus.date_soumission 
-                FROM SAE 
-                LEFT JOIN Rendus ON SAE.id = Rendus.sae_id AND Rendus.etudiant_id = ?
-                WHERE SAE.classe_cible = ? OR SAE.classe_cible = 'Toutes'
+                FROM SAE LEFT JOIN Rendus ON SAE.id = Rendus.sae_id AND Rendus.etudiant_id = ?
+                WHERE (SAE.classe_cible = ? OR SAE.classe_cible = 'Toutes') AND SAE.statut = 'validee'
             `, [req.user.id, userDb.classe]);
             return res.json(rows);
         }
@@ -198,9 +225,13 @@ app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, re
     const date_creation = new Date().toISOString().split('T')[0]; 
     const fichiersNoms = req.files ? req.files.map(f => f.filename) : [];
     const documentsStr = JSON.stringify(fichiersNoms); 
+    
+    // NOUVEAU : L'admin valide direct, le prof passe en attente
+    const statut = req.user.role === 'admin' ? 'validee' : 'en_attente';
+
     try {
-        await db.run('INSERT INTO SAE (nom, auteur_id, description, date_creation, documents, date_rendu, classe_cible) VALUES (?, ?, ?, ?, ?, ?, ?)', [nom, auteur_id, description, date_creation, documentsStr, date_rendu, classe_cible || 'Toutes']);
-        res.status(201).json({ message: "SAE créée avec succès !" });
+        await db.run('INSERT INTO SAE (nom, auteur_id, description, date_creation, documents, date_rendu, classe_cible, statut) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [nom, auteur_id, description, date_creation, documentsStr, date_rendu, classe_cible || 'Toutes', statut]);
+        res.status(201).json({ message: "SAE créée !" });
     } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur" }); }
 });
 

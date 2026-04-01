@@ -131,4 +131,19 @@ export const saeService = {
     if (!response.ok) throw new Error("Échec assignation");
     return await response.json();
   }
+
+  , // N'oublie pas la virgule si tu es après la dernière fonction existante !
+  validateSae: async (saeId, token) => {
+    const response = await fetch(`${API_BASE_URL}/admin/sae/${saeId}/validate`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } });
+    if (!response.ok) throw new Error("Erreur validation");
+    return await response.json();
+  },
+  adminUpdateUser: async (userId, userData, token) => {
+    const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(userData)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message);
+    return data;
+  }
 };

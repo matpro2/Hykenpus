@@ -19,7 +19,6 @@ function App() {
   const [nom, setNom] = useState('');
   const [prenom, setPrenom] = useState('');
   
-  // NOTE: Le rôle est forcé à 'etudiant' pour l'inscription publique
   const [classeInscription, setClasseInscription] = useState(CLASSES_DISPOS[0]);
 
   const [profilData, setProfilData] = useState({ nom: '', prenom: '', mail: '', classeEtudiant: '', classesEns: [] });
@@ -50,6 +49,9 @@ function App() {
   const [adminNewPwd, setAdminNewPwd] = useState('');
   const [adminNewRole, setAdminNewRole] = useState('enseignant');
   const [adminNewClasses, setAdminNewClasses] = useState([]);
+
+  const [isEditingUser, setIsEditingUser] = useState(false);
+  const [adminEditUserId, setAdminEditUserId] = useState(null);
 
   const [quantiteGeneration, setQuantiteGeneration] = useState(10);
   const [adminMessage, setAdminMessage] = useState(null);
@@ -100,7 +102,6 @@ function App() {
   const handleRegister = async (e) => {
     e.preventDefault(); setErreur(null); setSucces(null);
     try {
-      // Inscription publique = étudiant par défaut
       await saeService.register({ nom, prenom, mail: identifiant, password, classe: classeInscription });
       const data = await saeService.login(identifiant, password);
       saveAuthData(data); setNom(''); setPrenom(''); setPassword(''); setVueActuelle('dashboard');
@@ -204,22 +205,42 @@ function App() {
       } catch(err) { setErreur(err.message); }
   };
 
-  // ADMIN CREATE USER
-  const handleAdminCreateUser = async (e) => {
+  const handleAdminSaveUser = async (e) => {
     e.preventDefault(); setErreur(null); setAdminMessage(null);
-    if (adminNewRole === 'enseignant' && adminNewClasses.length === 0) return setErreur("Sélectionnez au moins une classe pour ce professeur.");
-    
+    if (adminNewRole === 'enseignant' && adminNewClasses.length === 0) return setErreur("Sélectionnez au moins une classe.");
     try {
-       await saeService.adminCreateUser({
-           nom: adminNewNom, prenom: adminNewPrenom, mail: adminNewMail, 
-           password: adminNewPwd, role: adminNewRole, 
-           classes: adminNewRole === 'enseignant' ? adminNewClasses : adminNewClasses[0] || CLASSES_DISPOS[0]
-       }, token);
-       setAdminMessage("Compte créé avec succès !");
+       const payload = { nom: adminNewNom, prenom: adminNewPrenom, mail: adminNewMail, password: adminNewPwd, role: adminNewRole, classes: adminNewRole === 'enseignant' ? adminNewClasses : adminNewClasses[0] || CLASSES_DISPOS[0] };
+       
+       if (isEditingUser) {
+           await saeService.adminUpdateUser(adminEditUserId, payload, token);
+           setAdminMessage("Compte modifié !");
+       } else {
+           await saeService.adminCreateUser(payload, token);
+           setAdminMessage("Compte créé !");
+       }
+       setIsEditingUser(false); setAdminEditUserId(null);
        setAdminNewNom(''); setAdminNewPrenom(''); setAdminNewMail(''); setAdminNewPwd(''); setAdminNewClasses([]);
        const users = await saeService.getAllUsers(token);
        setListeUtilisateurs(users);
     } catch(err) { setErreur(err.message); }
+  };
+
+  const openAdminEditUser = (user) => {
+      setIsEditingUser(true); setAdminEditUserId(user.id);
+      setAdminNewNom(user.nom); setAdminNewPrenom(user.prenom); setAdminNewMail(user.mail); setAdminNewPwd(''); setAdminNewRole(user.role);
+      let parsed = [];
+      if(user.role === 'enseignant') { try { parsed = JSON.parse(user.classe); } catch(e){} } else { parsed = [user.classe]; }
+      setAdminNewClasses(parsed);
+      window.scrollTo({ top: 0, behavior: 'smooth' }); 
+  };
+
+  const handleValidateSae = async (saeId, e) => {
+      e.stopPropagation(); 
+      try {
+          await saeService.validateSae(saeId, token);
+          const data = await saeService.getListeSae(token);
+          setSaes(data);
+      } catch(err) { setErreur(err.message); }
   };
 
   const handleGenerate = async (type) => {
@@ -306,7 +327,6 @@ function App() {
              </div>
           )}
 
-          {/* GESTION DE CLASSES POUR LE PROF */}
           {token && role === 'enseignant' && classesDuProf.length > 0 && (
              <>
                <span className="nav-label" style={{marginTop: '20px'}}>Mes Classes</span>
@@ -470,10 +490,16 @@ function App() {
                   <div key={sae.id} className="card" style={{ cursor: token ? 'pointer' : 'default' }} onClick={() => token && openSaeDetails(sae.id)}>
                     <div className="card-header">
                       <span className="badge badge-primary">{sae.classe_cible}</span>
-                      {role === 'etudiant' && (
-                          <span className={`badge badge-${statut.couleur}`}>{statut.texte}</span>
-                      )}
+                      {role === 'etudiant' && <span className={`badge badge-${statut.couleur}`}>{statut.texte}</span>}
+                      {sae.statut === 'en_attente' && <span style={{backgroundColor: '#f59e0b', color: '#fff', padding: '3px 8px', borderRadius: '12px', fontSize: '0.8rem', marginLeft: '10px'}}>⚠️ En attente de validation</span>}
                     </div>
+                    
+                    {role === 'admin' && sae.statut === 'en_attente' && (
+                       <button onClick={(e) => handleValidateSae(sae.id, e)} style={{background: '#10b981', color: 'white', padding: '8px', border: 'none', borderRadius: '5px', width: '100%', marginTop: '10px', cursor: 'pointer'}}>
+                          ✅ Valider et Publier cette SAE
+                       </button>
+                    )}
+
                     <h3 className="card-title">{sae.nom}</h3>
                     <p className="card-desc" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{sae.description}</p>
                     <div className="card-meta">
@@ -548,7 +574,7 @@ function App() {
                             ))}
                          </div>
                          <hr style={{borderColor: 'var(--border-color)', margin: '1rem 0'}}/>
-                         <p style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Vous pouvez écraser votre rendu en déposant de nouveaux fichiers ci-dessous.</p>
+                         <p style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Vous pouvez écraser votre rendu en déposant de nouveaux fichiers.</p>
                        </div>
                     ) : (
                        <p style={{color: 'var(--text-muted)', marginBottom: '1rem'}}>
@@ -796,14 +822,14 @@ function App() {
               <div className="card" style={{marginBottom: '2rem'}}>
                 <h2>Créer un compte manuellement</h2>
                 <p className="text-muted" style={{marginBottom:'1rem'}}>Permet de créer un compte Enseignant (ou Étudiant sur mesure).</p>
-                <form onSubmit={handleAdminCreateUser}>
+                <form onSubmit={handleAdminSaveUser}>
                    <div className="form-row">
                       <input type="text" placeholder="Prénom" value={adminNewPrenom} onChange={e => setAdminNewPrenom(e.target.value)} required style={{flex: 1}}/>
                       <input type="text" placeholder="Nom" value={adminNewNom} onChange={e => setAdminNewNom(e.target.value)} required style={{flex: 1}}/>
                    </div>
                    <div className="form-row">
                       <input type="email" placeholder="Email de connexion" value={adminNewMail} onChange={e => setAdminNewMail(e.target.value)} required style={{flex: 1}}/>
-                      <input type="text" placeholder="Mot de passe provisoire" value={adminNewPwd} onChange={e => setAdminNewPwd(e.target.value)} required style={{flex: 1}}/>
+                      <input type="text" placeholder="Mot de passe provisoire" value={adminNewPwd} onChange={e => setAdminNewPwd(e.target.value)} style={{flex: 1}}/>
                    </div>
                    
                    <div className="form-group" style={{marginTop: '10px'}}>
@@ -837,7 +863,13 @@ function App() {
                       </div>
                    )}
 
-                   <button type="submit" className="btn-secondary" style={{marginTop: '10px'}}>Créer le compte</button>
+                   {/* LES BOUTONS DU FORMULAIRE DE L'ADMIN */}
+                   <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
+                      <button type="submit" className="btn-secondary">{isEditingUser ? 'Enregistrer les modifications' : 'Créer le compte'}</button>
+                      {isEditingUser && (
+                         <button type="button" onClick={() => { setIsEditingUser(false); setAdminNewNom(''); setAdminNewPrenom(''); setAdminNewMail(''); setAdminNewPwd(''); }} style={{background: 'transparent', border: '1px solid #ccc', padding: '8px', borderRadius: '5px', cursor: 'pointer'}}>Annuler</button>
+                      )}
+                   </div>
                 </form>
               </div>
 
@@ -861,7 +893,10 @@ function App() {
                           <td className="text-muted">{user.mail}</td>
                           <td><span className={`badge badge-${user.role === 'admin' ? 'warning' : user.role === 'enseignant' ? 'success' : 'primary'}`}>{user.role}</span></td>
                           <td>{user.classe && user.classe.startsWith('[') ? JSON.parse(user.classe).join(', ') : (user.classe || '-')}</td>
+                          
+                          {/* L'AJOUT DES BOUTONS EDITER ET SE CONNECTER POUR L'ADMIN */}
                           <td>
+                            <button onClick={() => openAdminEditUser(user)} style={{marginRight: '5px', padding: '5px 10px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer'}}>✏️ Éditer</button>
                             {user.role !== 'admin' && (
                               <button onClick={() => handleImpersonate(user.id)} className="btn-small">🔗 Se connecter</button>
                             )}
