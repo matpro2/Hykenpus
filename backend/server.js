@@ -61,7 +61,6 @@ async function initDB() {
             FOREIGN KEY (auteur_id) REFERENCES Comptes(id) ON DELETE CASCADE
         );
 
-        -- NOUVEAU : TABLE POUR LES RENDUS DES ÉTUDIANTS
         CREATE TABLE IF NOT EXISTS Rendus (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sae_id INTEGER NOT NULL,
@@ -81,7 +80,7 @@ async function initDB() {
             ['Système', 'Admin', 'Admin', hashedAdminPw, 'admin', '["Toutes"]']
         );
     }
-    console.log("✅ Base de données locale prête (Avec système de Rendus) !");
+    console.log("✅ Base de données locale prête !");
 }
 initDB();
 
@@ -169,14 +168,11 @@ app.get('/api/sae', verifierToken, async (req, res) => {
 });
 
 app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, res) => {
-    if (req.user.role !== 'enseignant' && req.user.role !== 'admin') {
-        return res.status(403).json({ message: "Non autorisé." });
-    }
+    if (req.user.role !== 'enseignant' && req.user.role !== 'admin') return res.status(403).json({ message: "Non autorisé." });
 
     const { nom, description, date_rendu, classe_cible } = req.body;
     const auteur_id = req.user.id; 
     const date_creation = new Date().toISOString().split('T')[0]; 
-
     const fichiersNoms = req.files ? req.files.map(f => f.filename) : [];
     const documentsStr = JSON.stringify(fichiersNoms); 
 
@@ -191,38 +187,15 @@ app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, re
     }
 });
 
-// NOUVEAU RESTAURÉ : Récupérer les détails d'une seule SAE (avec le rendu de l'étudiant)
-app.get('/api/sae/:id', verifierToken, async (req, res) => {
-    try {
-        const sae = await db.get('SELECT * FROM SAE WHERE id = ?', [req.params.id]);
-        if (!sae) return res.status(404).json({ message: "SAE introuvable" });
-
-        let rendu = null;
-        if (req.user.role === 'etudiant') {
-            rendu = await db.get('SELECT * FROM Rendus WHERE sae_id = ? AND etudiant_id = ?', [req.params.id, req.user.id]);
-        }
-        res.json({ sae, rendu });
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur" });
-    }
-});
-
-// NOUVEAU : Route pour modifier une SAE existante
 app.put('/api/sae/:id', verifierToken, upload.array('fichiers', 10), async (req, res) => {
-    if (req.user.role !== 'enseignant' && req.user.role !== 'admin') {
-        return res.status(403).json({ message: "Non autorisé." });
-    }
-
+    if (req.user.role !== 'enseignant' && req.user.role !== 'admin') return res.status(403).json({ message: "Non autorisé." });
     const saeId = req.params.id;
     const { nom, description, date_rendu, classe_cible } = req.body;
 
     try {
         const sae = await db.get('SELECT * FROM SAE WHERE id = ?', [saeId]);
         if (!sae) return res.status(404).json({ message: "SAE introuvable" });
-        
-        if (req.user.role !== 'admin' && sae.auteur_id !== req.user.id) {
-            return res.status(403).json({ message: "Vous ne pouvez modifier que vos propres SAE." });
-        }
+        if (req.user.role !== 'admin' && sae.auteur_id !== req.user.id) return res.status(403).json({ message: "Non autorisé." });
 
         let documentsStr = sae.documents; 
         if (req.files && req.files.length > 0) {
@@ -241,20 +214,31 @@ app.put('/api/sae/:id', verifierToken, upload.array('fichiers', 10), async (req,
     }
 });
 
-// NOUVEAU : Déposer un travail (Rendu)
-app.post('/api/sae/:id/rendu', verifierToken, upload.array('fichiers', 5), async (req, res) => {
-    if (req.user.role !== 'etudiant') return res.status(403).json({ message: "Seuls les étudiants peuvent rendre un travail." });
+app.get('/api/sae/:id', verifierToken, async (req, res) => {
+    try {
+        const sae = await db.get('SELECT * FROM SAE WHERE id = ?', [req.params.id]);
+        if (!sae) return res.status(404).json({ message: "SAE introuvable" });
 
+        let rendu = null;
+        if (req.user.role === 'etudiant') {
+            rendu = await db.get('SELECT * FROM Rendus WHERE sae_id = ? AND etudiant_id = ?', [req.params.id, req.user.id]);
+        }
+        res.json({ sae, rendu });
+    } catch (error) {
+        res.status(500).json({ message: "Erreur serveur" });
+    }
+});
+
+app.post('/api/sae/:id/rendu', verifierToken, upload.array('fichiers', 5), async (req, res) => {
+    if (req.user.role !== 'etudiant') return res.status(403).json({ message: "Non autorisé." });
     const sae_id = req.params.id;
     const etudiant_id = req.user.id;
     const date_soumission = new Date().toISOString(); 
-
     const fichiersNoms = req.files ? req.files.map(f => f.filename) : [];
     const documentsStr = JSON.stringify(fichiersNoms);
 
     try {
         const existing = await db.get('SELECT id FROM Rendus WHERE sae_id = ? AND etudiant_id = ?', [sae_id, etudiant_id]);
-        
         if (existing) {
             await db.run('UPDATE Rendus SET date_soumission = ?, documents = ? WHERE id = ?', [date_soumission, documentsStr, existing.id]);
         } else {
@@ -266,10 +250,8 @@ app.post('/api/sae/:id/rendu', verifierToken, upload.array('fichiers', 5), async
     }
 });
 
-// ADMIN MOCK DATA (Génération)
 app.post('/api/admin/generate', verifierToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ message: "Accès refusé." });
-    
     const { type, count } = req.body;
     const limit = parseInt(count) || 5;
     const classesList = ['MMI-A1', 'MMI-A2', 'MMI-B1', 'MMI-B2', 'MMI-C1', 'MMI-C2'];
@@ -294,45 +276,34 @@ app.post('/api/admin/generate', verifierToken, async (req, res) => {
                 } else {
                     classe = classesList[Math.floor(Math.random() * classesList.length)];
                 }
-                
                 await db.run('INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role, classe) VALUES (?, ?, ?, ?, ?, ?)', [n, p, mail, pwd, role, classe]);
             }
             res.json({ message: `✅ ${limit} comptes générés !` });
-        
         } else if (type === 'saes') {
             const profs = await db.all('SELECT id, classe FROM Comptes WHERE role = "enseignant"');
             if(profs.length === 0) return res.status(400).json({ message: "❌ Il faut au moins un Enseignant." });
-
             const sujets = ['Création site web', 'Design UI/UX', 'Montage vidéo', 'Stratégie Com'];
-            
             for(let i=0; i<limit; i++) {
                 const prof = profs[Math.floor(Math.random() * profs.length)];
                 const nom = `SAE 3.0${Math.floor(Math.random() * 9) + 1} - ${sujets[Math.floor(Math.random() * sujets.length)]}`;
                 const auteur_id = prof.id;
                 const desc = "Description générée automatiquement.";
                 const date_c = new Date().toISOString().split('T')[0];
-                
                 const futureDate = new Date();
-                // Génère des dates entre le passé (-10 jours) et le futur (+20 jours) pour tester les retards
                 futureDate.setDate(futureDate.getDate() + Math.floor(Math.random() * 30) - 10); 
                 futureDate.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60)); 
                 const date_r = futureDate.toISOString().slice(0, 16); 
                 const docs = "[]";
-                
                 let profClasses = [];
                 try { profClasses = JSON.parse(prof.classe); } catch(e) {}
                 const classe = profClasses.length > 0 ? profClasses[Math.floor(Math.random() * profClasses.length)] : 'Toutes';
-
                 await db.run('INSERT INTO SAE (nom, auteur_id, description, date_creation, documents, date_rendu, classe_cible) VALUES (?, ?, ?, ?, ?, ?, ?)', [nom, auteur_id, desc, date_c, docs, date_r, classe]);
             }
             res.json({ message: `✅ ${limit} SAEs générées !` });
         }
-    } catch (error) {
-        res.status(500).json({ message: "Erreur lors de la génération." });
-    }
+    } catch (error) { res.status(500).json({ message: "Erreur lors de la génération." }); }
 });
 
-// ... autres routes admin et profil inchangées ...
 app.get('/api/admin/users', verifierToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ message: "Accès refusé." });
     try {
@@ -340,6 +311,7 @@ app.get('/api/admin/users', verifierToken, async (req, res) => {
         res.json(users);
     } catch (error) { res.status(500).json({ message: "Erreur serveur." }); }
 });
+
 app.post('/api/admin/impersonate', verifierToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ message: "Accès refusé." });
     const { userId } = req.body;
@@ -350,6 +322,7 @@ app.post('/api/admin/impersonate', verifierToken, async (req, res) => {
         res.json({ token, role: user.role, nom: user.nom, prenom: user.prenom, classe: user.classe });
     } catch (error) { res.status(500).json({ message: "Erreur serveur." }); }
 });
+
 app.get('/api/users/me', verifierToken, async (req, res) => {
     try {
         const user = await db.get('SELECT nom, prenom, mail, role, classe FROM Comptes WHERE id = ?', [req.user.id]);
@@ -357,6 +330,7 @@ app.get('/api/users/me', verifierToken, async (req, res) => {
         res.json(user);
     } catch (error) { res.status(500).json({ message: "Erreur serveur" }); }
 });
+
 app.put('/api/users/me', verifierToken, async (req, res) => {
     const { nom, prenom, mail, classe } = req.body;
     try {
@@ -366,6 +340,27 @@ app.put('/api/users/me', verifierToken, async (req, res) => {
         const token = jwt.sign({ id: req.user.id, mail: mail, role: req.user.role, classe: classe }, SECRET_KEY, { expiresIn: '2h' });
         res.json({ token, nom, prenom, classe, message: "Profil mis à jour !" });
     } catch (error) { res.status(500).json({ message: "Erreur lors de la mise à jour." }); }
+});
+
+// --- NOUVELLES ROUTES : GESTION DES CLASSES PAR L'ENSEIGNANT ---
+
+// 1. Récupérer la liste de TOUS les étudiants (pour que le prof puisse les ajouter)
+app.get('/api/enseignant/etudiants', verifierToken, async (req, res) => {
+    if (req.user.role !== 'enseignant' && req.user.role !== 'admin') return res.status(403).json({ message: "Refusé" });
+    try {
+        const etudiants = await db.all("SELECT id, nom, prenom, mail, classe FROM Comptes WHERE role = 'etudiant' ORDER BY nom ASC");
+        res.json(etudiants);
+    } catch (error) { res.status(500).json({ message: "Erreur serveur" }); }
+});
+
+// 2. Assigner un élève à une classe
+app.put('/api/enseignant/etudiants/:id/classe', verifierToken, async (req, res) => {
+    if (req.user.role !== 'enseignant' && req.user.role !== 'admin') return res.status(403).json({ message: "Refusé" });
+    const { nouvelleClasse } = req.body;
+    try {
+        await db.run("UPDATE Comptes SET classe = ? WHERE id = ? AND role = 'etudiant'", [nouvelleClasse, req.params.id]);
+        res.json({ message: "Classe de l'élève mise à jour" });
+    } catch (error) { res.status(500).json({ message: "Erreur" }); }
 });
 
 app.listen(PORT, () => {

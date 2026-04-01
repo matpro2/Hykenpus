@@ -6,163 +6,145 @@ import './App.css';
 const CLASSES_DISPOS = ['MMI-A1', 'MMI-A2', 'MMI-B1', 'MMI-B2', 'MMI-C1', 'MMI-C2'];
 
 function App() {
-  // --- ÉTATS D'AUTHENTIFICATION & NAVIGATION ---
   const [token, setToken] = useState(localStorage.getItem('jwtToken') || null);
   const [role, setRole] = useState(localStorage.getItem('userRole') || null);
   const [prenomUser, setPrenomUser] = useState(localStorage.getItem('userPrenom') || '');
+  const [userClasse, setUserClasse] = useState(localStorage.getItem('userClasse') || ''); 
   const [vueActuelle, setVueActuelle] = useState('public');
   const [loading, setLoading] = useState(false);
-
-  // --- ÉTAT DU THÈME (MODE SOMBRE) ---
   const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
 
-  // --- ÉTATS FORMULAIRES ---
   const [identifiant, setIdentifiant] = useState(''); 
   const [password, setPassword] = useState('');
   const [nom, setNom] = useState('');
   const [prenom, setPrenom] = useState('');
   const [roleInscription, setRoleInscription] = useState('etudiant');
   const [classeInscription, setClasseInscription] = useState(CLASSES_DISPOS[0]);
+  const [classesEnseignant, setClassesEnseignant] = useState([]); 
+
+  const [profilData, setProfilData] = useState({ nom: '', prenom: '', mail: '', classeEtudiant: '', classesEns: [] });
+  const [profilMessage, setProfilMessage] = useState(null);
 
   const [nomSae, setNomSae] = useState('');
   const [descriptionSae, setDescriptionSae] = useState('');
-  const [dateRenduSae, setDateRenduSae] = useState('');
-  const [classeCible, setClasseCible] = useState('Toutes');
-  const [fichiersSae, setFichiersSae] = useState([]);
-
-  // --- ÉTATS VUE DÉTAILS ---
+  const [dateRenduSae, setDateRenduSae] = useState(''); 
+  const [classeCible, setClasseCible] = useState('Toutes'); 
+  const [fichiersSae, setFichiersSae] = useState([]); 
+  
   const [selectedSae, setSelectedSae] = useState(null);
   const [selectedRendu, setSelectedRendu] = useState(null);
   const [fichiersRendu, setFichiersRendu] = useState([]);
 
-  // --- ÉTATS DATA & UI ---
-  const [saes, setSaes] = useState([]);
-  const [listeUtilisateurs, setListeUtilisateurs] = useState([]);
+  // NOUVEAU : États pour la gestion des classes
+  const [etudiants, setEtudiants] = useState([]);
+  const [classeGeree, setClasseGeree] = useState('');
+
   const [quantiteGeneration, setQuantiteGeneration] = useState(10);
-  const [triDate, setTriDate] = useState('asc');
-  
-  // NOUVEAU : État pour les filtres de statut (Toutes cochées par défaut)
-  const [filtresStatut, setFiltresStatut] = useState(['En cours', 'En retard', 'Terminée']);
+  const [adminMessage, setAdminMessage] = useState(null);
+  const [listeUtilisateurs, setListeUtilisateurs] = useState([]); 
 
   const [erreur, setErreur] = useState(null);
   const [succes, setSucces] = useState(null);
+  const [saes, setSaes] = useState([]);
+  const [triDate, setTriDate] = useState('asc'); 
+  const [filtresStatut, setFiltresStatut] = useState(['En cours', 'En retard', 'Terminée']);
 
-  // --- LOGIQUE DU THÈME ---
   useEffect(() => {
-    if (isDarkMode) {
-      document.body.classList.add('dark-mode');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.body.classList.remove('dark-mode');
-      localStorage.setItem('theme', 'light');
-    }
+    if (isDarkMode) { document.body.classList.add('dark-mode'); localStorage.setItem('theme', 'dark'); } 
+    else { document.body.classList.remove('dark-mode'); localStorage.setItem('theme', 'light'); }
   }, [isDarkMode]);
-
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
-  // --- LOGIQUE INITIALE (CHARGEMENT DATA) ---
   useEffect(() => {
-    setLoading(true);
-    setErreur(null);
+    setLoading(true); setErreur(null);
     if (token) {
-      if (['public', 'login', 'register'].includes(vueActuelle)) {
-        setVueActuelle('dashboard');
-      }
-      saeService.getListeSae(token)
-        .then(setSaes)
-        .catch(handleLogout)
-        .finally(() => setLoading(false));
-
-      if (vueActuelle === 'admin' && role === 'admin') {
-        saeService.getAllUsers(token).then(setListeUtilisateurs).catch(console.error);
+      if (['public', 'login', 'register'].includes(vueActuelle)) setVueActuelle('dashboard');
+      saeService.getListeSae(token).then(setSaes).catch(handleLogout).finally(() => setLoading(false));
+      
+      if (vueActuelle === 'admin' && role === 'admin') saeService.getAllUsers(token).then(setListeUtilisateurs).catch(console.error);
+      
+      // NOUVEAU : Charge la liste des étudiants si le prof ouvre la gestion des classes
+      if (vueActuelle === 'gestion-classe' && role === 'enseignant') {
+          saeService.getEtudiants(token).then(setEtudiants).catch(console.error);
       }
     } else {
-      setVueActuelle(prev => ['dashboard', 'create-sae', 'admin', 'sae-details'].includes(prev) ? 'public' : prev);
-      saeService.getPublicListeSae()
-        .then(setSaes)
-        .catch(console.error)
-        .finally(() => setLoading(false));
+      setVueActuelle(prev => ['dashboard', 'create-sae', 'admin', 'profile', 'sae-details', 'edit-sae', 'gestion-classe'].includes(prev) ? 'public' : prev);
+      saeService.getPublicListeSae().then(setSaes).catch(console.error).finally(() => setLoading(false));
     }
-  }, [token, vueActuelle, role]);
+  }, [token, vueActuelle, role, classeGeree]);
 
-  // --- HANDLERS D'AUTHENTIFICATION ---
+  const saveAuthData = (data) => {
+    setToken(data.token); setRole(data.role); setPrenomUser(data.prenom); setUserClasse(data.classe);
+    localStorage.setItem('jwtToken', data.token); localStorage.setItem('userRole', data.role); localStorage.setItem('userPrenom', data.prenom); localStorage.setItem('userClasse', data.classe); 
+  };
+
   const handleLogin = async (e) => {
-    e.preventDefault();
-    setErreur(null);
+    e.preventDefault(); setErreur(null);
     try {
       const data = await saeService.login(identifiant, password);
-      setToken(data.token); setRole(data.role); setPrenomUser(data.prenom);
-      localStorage.setItem('jwtToken', data.token); 
-      localStorage.setItem('userRole', data.role); 
-      localStorage.setItem('userPrenom', data.prenom);
-      setIdentifiant(''); setPassword('');
-      setVueActuelle('dashboard');
+      saveAuthData(data); setVueActuelle('dashboard');
     } catch (err) { setErreur(err.message); }
   };
 
   const handleRegister = async (e) => {
-    e.preventDefault();
-    setErreur(null);
+    e.preventDefault(); setErreur(null); setSucces(null);
+    const classeFormattee = roleInscription === 'enseignant' ? JSON.stringify(classesEnseignant) : classeInscription;
+    if (roleInscription === 'enseignant' && classesEnseignant.length === 0) return setErreur("Sélectionnez au moins une classe.");
     try {
-      await saeService.register({ nom, prenom, mail: identifiant, password, role: roleInscription, classe: classeInscription });
+      await saeService.register({ nom, prenom, mail: identifiant, password, role: roleInscription, classe: classeFormattee });
       const data = await saeService.login(identifiant, password);
-      setToken(data.token); setRole(data.role); setPrenomUser(data.prenom);
-      localStorage.setItem('jwtToken', data.token); localStorage.setItem('userRole', data.role); localStorage.setItem('userPrenom', data.prenom);
-      setIdentifiant(''); setPassword('');
-      setVueActuelle('dashboard');
+      saveAuthData(data); setNom(''); setPrenom(''); setPassword(''); setVueActuelle('dashboard');
     } catch (err) { setErreur(err.message); }
   };
 
-  const handleLogout = () => {
-    setToken(null); setRole(null); setPrenomUser('');
-    localStorage.removeItem('jwtToken'); localStorage.removeItem('userRole'); localStorage.removeItem('userPrenom');
-    setSaes([]); setVueActuelle('public');
+  const openProfilePage = async () => {
+      setErreur(null); setProfilMessage(null);
+      try {
+          const data = await saeService.getMyProfile(token);
+          let classesEns = []; let classeEtu = CLASSES_DISPOS[0];
+          if (data.role === 'enseignant' || data.role === 'admin') { try { classesEns = JSON.parse(data.classe); } catch(e) {} } 
+          else { classeEtu = data.classe; }
+          setProfilData({ nom: data.nom, prenom: data.prenom, mail: data.mail, classeEtudiant: classeEtu, classesEns: classesEns });
+          setVueActuelle('profile');
+      } catch(err) { setErreur(err.message); }
   };
 
-  // --- HANDLERS ACTIONS SAE ---
+  const handleUpdateProfile = async (e) => {
+      e.preventDefault(); setErreur(null); setProfilMessage(null);
+      const classeFormattee = (role === 'enseignant' || role === 'admin') ? JSON.stringify(profilData.classesEns) : profilData.classeEtudiant;
+      if ((role === 'enseignant' || role === 'admin') && profilData.classesEns.length === 0) return setErreur("Sélectionnez au moins une classe.");
+      try {
+          const data = await saeService.updateProfile({ nom: profilData.nom, prenom: profilData.prenom, mail: profilData.mail, classe: classeFormattee }, token);
+          saveAuthData(data); setProfilMessage(data.message);
+      } catch(err) { setErreur(err.message); }
+  };
+
   const handleCreateSae = async (e) => {
-    e.preventDefault();
-    setErreur(null);
+    e.preventDefault(); setErreur(null);
     try {
       const formData = new FormData();
-      formData.append('nom', nomSae);
-      formData.append('description', descriptionSae);
-      formData.append('date_rendu', dateRenduSae);
-      formData.append('classe_cible', classeCible);
+      formData.append('nom', nomSae); formData.append('description', descriptionSae); formData.append('date_rendu', dateRenduSae); formData.append('classe_cible', classeCible); 
       fichiersSae.forEach(f => formData.append('fichiers', f));
-
       await saeService.createSae(formData, token);
-      const data = await saeService.getListeSae(token);
-      setSaes(data);
-      setNomSae(''); setDescriptionSae(''); setVueActuelle('dashboard');
-      setSucces("SAE publiée avec succès !");
+      const donnees = await saeService.getListeSae(token);
+      setSaes(donnees); setNomSae(''); setDescriptionSae(''); setDateRenduSae(''); setClasseCible('Toutes'); setFichiersSae([]); setVueActuelle('dashboard');
     } catch (err) { setErreur(err.message); }
   };
 
-  // NOUVEAU : Ouvrir le mode édition et pré-remplir les champs
   const openEditSae = (sae) => {
-    setNomSae(sae.nom);
-    setDescriptionSae(sae.description);
-    setDateRenduSae(sae.date_rendu || '');
-    setClasseCible(sae.classe_cible || 'Toutes');
-    setSelectedSae(sae); 
-    setFichiersSae([]);
-    setErreur(null);
-    setVueActuelle('edit-sae');
+    setNomSae(sae.nom); setDescriptionSae(sae.description); setDateRenduSae(sae.date_rendu || ''); setClasseCible(sae.classe_cible || 'Toutes');
+    setSelectedSae(sae); setFichiersSae([]); setErreur(null); setVueActuelle('edit-sae');
   };
 
-  // NOUVEAU : Envoyer les modifications
   const handleEditSae = async (e) => {
     e.preventDefault(); setErreur(null);
     try {
       const formData = new FormData();
       formData.append('nom', nomSae); formData.append('description', descriptionSae); formData.append('date_rendu', dateRenduSae); formData.append('classe_cible', classeCible);
       fichiersSae.forEach(f => formData.append('fichiers', f));
-
       await saeService.updateSae(selectedSae.id, formData, token);
       const data = await saeService.getListeSae(token);
-      setSaes(data);
-      setNomSae(''); setDescriptionSae(''); setVueActuelle('dashboard'); setSucces("SAE modifiée avec succès !");
+      setSaes(data); setNomSae(''); setDescriptionSae(''); setVueActuelle('dashboard'); setSucces("SAE modifiée avec succès !");
     } catch (err) { setErreur(err.message); }
   };
 
@@ -170,22 +152,18 @@ function App() {
     setErreur(null); setSucces(null);
     try {
       const data = await saeService.getSaeDetails(saeId, token);
-      setSelectedSae(data.sae);
-      setSelectedRendu(data.rendu);
-      setVueActuelle('sae-details');
+      setSelectedSae(data.sae); setSelectedRendu(data.rendu); setVueActuelle('sae-details');
     } catch(err) { setErreur(err.message); }
   };
 
   const handleSubmitRendu = async (e) => {
     e.preventDefault(); setErreur(null); setSucces(null);
-    if (fichiersRendu.length === 0) return setErreur("Veuillez joindre au moins un fichier.");
+    if (fichiersRendu.length === 0) return setErreur("Joignez au moins un fichier.");
     try {
       const formData = new FormData();
       fichiersRendu.forEach(f => formData.append('fichiers', f));
       await saeService.soumettreRendu(selectedSae.id, formData, token);
-      setSucces("Travail rendu avec succès !");
-      setFichiersRendu([]);
-      
+      setSucces("Travail rendu avec succès !"); setFichiersRendu([]);
       const data = await saeService.getSaeDetails(selectedSae.id, token);
       setSelectedRendu(data.rendu);
       const newList = await saeService.getListeSae(token);
@@ -193,71 +171,84 @@ function App() {
     } catch(err) { setErreur(err.message); }
   };
 
+  // NOUVEAU : Fonction pour forcer la classe d'un étudiant depuis le panel prof
+  const handleAssignerClasse = async (etudiantId, nouvelleClasse) => {
+      setErreur(null); setSucces(null);
+      try {
+          await saeService.updateEtudiantClasse(etudiantId, nouvelleClasse, token);
+          setSucces("L'élève a bien été assigné à la classe !");
+          // On rafraîchit la liste
+          const data = await saeService.getEtudiants(token);
+          setEtudiants(data);
+      } catch(err) { setErreur(err.message); }
+  };
+
   const handleGenerate = async (type) => {
-    setErreur(null); setSucces(null);
+    setAdminMessage(null); setErreur(null);
     try {
       const data = await saeService.generateMockData(type, quantiteGeneration, token);
-      setSucces(data.message);
+      setAdminMessage(data.message);
       if (type === 'saes') saeService.getListeSae(token).then(setSaes);
-      if (type === 'users') saeService.getAllUsers(token).then(setListeUtilisateurs);
-    } catch (err) { setErreur(err.message); }
+      else if (type === 'users') saeService.getAllUsers(token).then(setListeUtilisateurs);
+    } catch(err) { setErreur(err.message); }
   };
 
   const handleImpersonate = async (userId) => {
     try {
       const data = await saeService.impersonateUser(userId, token);
-      setToken(data.token); setRole(data.role); setPrenomUser(data.prenom);
-      localStorage.setItem('jwtToken', data.token); localStorage.setItem('userRole', data.role); localStorage.setItem('userPrenom', data.prenom);
-      setVueActuelle('dashboard');
-    } catch (err) { setErreur(err.message); }
+      saveAuthData(data); setVueActuelle('dashboard');
+    } catch(err) { setErreur(err.message); }
   };
 
-  // NOUVEAU : Fonction pour basculer les cases à cocher du filtre
+  const handleLogout = () => {
+    setToken(null); setRole(null); setPrenomUser(''); setUserClasse('');
+    localStorage.clear(); setSaes([]); setVueActuelle('public'); setIdentifiant(''); setPassword('');
+  };
+
   const toggleFiltreStatut = (statut) => {
-    setFiltresStatut(prev => 
-      prev.includes(statut) ? prev.filter(s => s !== statut) : [...prev, statut]
-    );
+    setFiltresStatut(prev => prev.includes(statut) ? prev.filter(s => s !== statut) : [...prev, statut]);
   };
 
-  // --- UTILS (TRI ET STATUT) ---
   const determinerStatut = (sae) => {
     if (sae.rendu_id || (selectedRendu && selectedSae?.id === sae.id)) return { texte: 'Terminée', couleur: 'success' };
     if (!sae.date_rendu) return { texte: 'En cours', couleur: 'primary' };
-    
     const isRetard = new Date(sae.date_rendu) < new Date();
     if (isRetard) return { texte: 'En retard', couleur: 'danger' };
     return { texte: 'En cours', couleur: 'primary' };
   };
 
-  // NOUVEAU : Application du tri ET du filtre des cases à cocher
-  const saesAffichees = [...saes]
-    .filter(sae => {
-       // Si ce n'est pas un étudiant, on affiche tout (filtre inactif)
+  const getSaesTriees = (listeASorter) => {
+    return [...listeASorter].filter(sae => {
        if (role !== 'etudiant') return true;
-       // Sinon, on vérifie si le statut de la SAE est présent dans les cases cochées
-       const statutSae = determinerStatut(sae).texte;
-       return filtresStatut.includes(statutSae);
-    })
-    .sort((a, b) => {
+       return filtresStatut.includes(determinerStatut(sae).texte);
+    }).sort((a, b) => {
       if (!a.date_rendu) return 1;
       if (!b.date_rendu) return -1;
-      return triDate === 'asc' 
-        ? new Date(a.date_rendu) - new Date(b.date_rendu) 
-        : new Date(b.date_rendu) - new Date(a.date_rendu);
+      const dateA = new Date(a.date_rendu).getTime();
+      const dateB = new Date(b.date_rendu).getTime();
+      return triDate === 'asc' ? dateA - dateB : dateB - dateA;
     });
-
-  const formatDateTime = (d) => {
-    if (!d) return '';
-    const obj = new Date(d);
-    return isNaN(obj) ? d : obj.toLocaleDateString('fr-FR') + ' à ' + obj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
   };
+
+  const formatDateTime = (dateString) => {
+    if (!dateString) return null;
+    const dateObj = new Date(dateString);
+    if (isNaN(dateObj)) return dateString; 
+    const dateFR = dateObj.toLocaleDateString('fr-FR');
+    const timeFR = dateObj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+    return `${dateFR} à ${timeFR}`;
+  };
+
+  let classesDuProf = [];
+  if (role === 'enseignant' && userClasse && userClasse.startsWith('[')) {
+      try { classesDuProf = JSON.parse(userClasse); } catch(e) {}
+  }
 
   return (
     <div className="app-container">
       {/* SIDEBAR */}
       <aside className="sidebar">
         <div className="logo">🛡️ MMI Hub</div>
-        
         <nav className="nav-group">
           <span className="nav-label">Navigation</span>
           <div className={`nav-item ${['dashboard', 'public'].includes(vueActuelle) ? 'active' : ''}`} onClick={() => setVueActuelle(token ? 'dashboard' : 'public')}>
@@ -268,6 +259,20 @@ function App() {
             <div className={`nav-item ${vueActuelle === 'create-sae' ? 'active' : ''}`} onClick={() => setVueActuelle('create-sae')}>
               ➕ Créer une SAE
             </div>
+          )}
+
+          {/* NOUVEAU : LE MENU DE GESTION DE CLASSES POUR LE PROF */}
+          {token && role === 'enseignant' && classesDuProf.length > 0 && (
+             <>
+               <span className="nav-label" style={{marginTop: '20px'}}>Mes Classes</span>
+               {classesDuProf.map(c => (
+                  <div key={c} 
+                       className={`nav-item ${vueActuelle === 'gestion-classe' && classeGeree === c ? 'active' : ''}`} 
+                       onClick={() => { setClasseGeree(c); setVueActuelle('gestion-classe'); }}>
+                     🎓 Classe {c}
+                  </div>
+               ))}
+             </>
           )}
 
           {token && role === 'admin' && (
@@ -307,32 +312,26 @@ function App() {
               vueActuelle === 'admin' ? 'Panneau de contrôle' : 
               vueActuelle === 'create-sae' ? 'Nouvelle SAE' : 
               vueActuelle === 'sae-details' ? 'Détails de la SAE' :
+              vueActuelle === 'edit-sae' ? 'Modification SAE' :
+              vueActuelle === 'profile' ? 'Mon Compte' :
+              vueActuelle === 'gestion-classe' ? `Gestion classe ${classeGeree}` :
               'Situations d\'Apprentissage'
             }</h1>
             {token && <div className="badge badge-primary">Session 2025-2026</div>}
           </div>
           
-          {/* NOUVEAU : ZONE DE FILTRES EN HAUT À DROITE */}
           <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
-            
-            {/* Les cases à cocher n'apparaissent que pour l'étudiant */}
             {role === 'etudiant' && vueActuelle === 'dashboard' && (
               <div style={{ display: 'flex', gap: '15px', backgroundColor: 'var(--bg-color)', padding: '8px 15px', borderRadius: '8px', border: '1px solid var(--border-color)', alignItems: 'center' }}>
                 <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Afficher :</span>
-                
                 <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                  <input type="checkbox" checked={filtresStatut.includes('En cours')} onChange={() => toggleFiltreStatut('En cours')} />
-                  En cours
+                  <input type="checkbox" checked={filtresStatut.includes('En cours')} onChange={() => toggleFiltreStatut('En cours')} /> En cours
                 </label>
-                
                 <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                  <input type="checkbox" checked={filtresStatut.includes('En retard')} onChange={() => toggleFiltreStatut('En retard')} />
-                  En retard
+                  <input type="checkbox" checked={filtresStatut.includes('En retard')} onChange={() => toggleFiltreStatut('En retard')} /> En retard
                 </label>
-                
                 <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                  <input type="checkbox" checked={filtresStatut.includes('Terminée')} onChange={() => toggleFiltreStatut('Terminée')} />
-                  Terminées
+                  <input type="checkbox" checked={filtresStatut.includes('Terminée')} onChange={() => toggleFiltreStatut('Terminée')} /> Terminées
                 </label>
               </div>
             )}
@@ -343,6 +342,11 @@ function App() {
                 <option value="desc">Date : Plus lointaine</option>
               </select>
             )}
+
+            {/* BOUTON MON COMPTE */}
+            {token && (
+              <button onClick={openProfilePage} className="btn-secondary" style={{ padding: '8px 15px', margin: 0 }}>👤 Mon Compte</button>
+            )}
           </div>
         </header>
 
@@ -350,11 +354,52 @@ function App() {
           {erreur && <div className="alert alert-danger">{erreur}</div>}
           {succes && <div className="alert alert-success">{succes}</div>}
 
+          {/* VUE : GESTION DES CLASSES (NOUVEAU) */}
+          {vueActuelle === 'gestion-classe' && role === 'enseignant' && (
+             <div style={{display: 'flex', gap: '20px', alignItems: 'flex-start'}}>
+                
+                {/* BLOC 1: ÉLÈVES ACTUELS DANS CETTE CLASSE */}
+                <div className="card" style={{flex: 1}}>
+                   <h2>Élèves de {classeGeree}</h2>
+                   <p style={{color: 'var(--text-muted)'}}>Liste des élèves actuellement assignés à cette classe.</p>
+                   <ul style={{listStyle: 'none', padding: 0, marginTop: '15px'}}>
+                      {etudiants.filter(e => e.classe === classeGeree).map(e => (
+                          <li key={e.id} style={{padding: '10px', borderBottom: '1px solid var(--border-color)'}}>
+                             <strong>{e.nom} {e.prenom}</strong> <br/>
+                             <span style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>📧 {e.mail}</span>
+                          </li>
+                      ))}
+                      {etudiants.filter(e => e.classe === classeGeree).length === 0 && (
+                          <li style={{color: 'var(--text-muted)'}}>Aucun élève dans cette classe.</li>
+                      )}
+                   </ul>
+                </div>
+
+                {/* BLOC 2: ÉLÈVES D'AUTRES CLASSES À AJOUTER */}
+                <div className="card" style={{flex: 1}}>
+                   <h2>Ajouter un élève</h2>
+                   <p style={{color: 'var(--text-muted)'}}>Sélectionnez des élèves du site pour les intégrer à {classeGeree}.</p>
+                   <ul style={{listStyle: 'none', padding: 0, marginTop: '15px', maxHeight: '500px', overflowY: 'auto'}}>
+                      {etudiants.filter(e => e.classe !== classeGeree).map(e => (
+                          <li key={e.id} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid var(--border-color)'}}>
+                             <div>
+                                <strong>{e.nom} {e.prenom}</strong> <br/>
+                                <span style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>Classe actuelle : {e.classe || 'Aucune'}</span>
+                             </div>
+                             <button onClick={() => handleAssignerClasse(e.id, classeGeree)} className="btn-secondary" style={{padding: '5px 10px', margin: 0}}>➕ Ajouter</button>
+                          </li>
+                      ))}
+                   </ul>
+                </div>
+
+             </div>
+          )}
+
           {/* VUE : DASHBOARD / PUBLIC */}
           {(vueActuelle === 'dashboard' || vueActuelle === 'public') && (
             <div className="sae-grid">
               {loading ? <p>Chargement des ressources...</p> : 
-               saesAffichees.length > 0 ? saesAffichees.map(sae => {
+               getSaesTriees(saes).length > 0 ? getSaesTriees(saes).map(sae => {
                  const statut = determinerStatut(sae);
                  return (
                   <div key={sae.id} className="card" style={{ cursor: token ? 'pointer' : 'default' }} onClick={() => token && openSaeDetails(sae.id)}>
@@ -376,14 +421,13 @@ function App() {
             </div>
           )}
 
-          {/* VUE : DÉTAILS DE LA SAE (AVEC DÉPÔT) */}
+          {/* VUE : DÉTAILS DE LA SAE */}
           {vueActuelle === 'sae-details' && selectedSae && (
             <div className="admin-layout">
               <div className="card" style={{marginBottom: '2rem'}}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
                    <h2>{selectedSae.nom}</h2>
                    <div>
-                     {/* NOUVEAU : Bouton Modifier pour le prof */}
                      {(role === 'enseignant' || role === 'admin') && (
                         <button onClick={() => openEditSae(selectedSae)} className="btn-primary" style={{marginRight: '10px', background: '#3b82f6', borderColor: '#3b82f6'}}>✏️ Modifier</button>
                      )}
@@ -398,7 +442,7 @@ function App() {
 
                 {selectedSae.documents && JSON.parse(selectedSae.documents).length > 0 && (
                    <div style={{marginTop: '1.5rem'}}>
-                     <h3>📎 Ressources fournies par l'enseignant</h3>
+                     <h3>📎 Ressources fournies</h3>
                      <div className="file-links" style={{marginTop:'10px'}}>
                         {JSON.parse(selectedSae.documents).map((file, i) => (
                           <a key={i} href={`${SERVER_URL}/uploads/${file}`} target="_blank" rel="noreferrer" className="btn-download">
@@ -427,7 +471,7 @@ function App() {
                             ))}
                          </div>
                          <hr style={{borderColor: 'var(--border-color)', margin: '1rem 0'}}/>
-                         <p style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Vous pouvez écraser votre rendu en déposant de nouveaux fichiers ci-dessous.</p>
+                         <p style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Vous pouvez écraser votre rendu en déposant de nouveaux fichiers.</p>
                        </div>
                     ) : (
                        <p style={{color: 'var(--text-muted)', marginBottom: '1rem'}}>
@@ -444,19 +488,19 @@ function App() {
             </div>
           )}
           
-          {/* VUE : LOGIN */}
+          {/* VUE : LOGIN / REGISTER / CREATE SAE / EDIT SAE / ADMIN / PROFILE */}
           {vueActuelle === 'login' && (
             <div className="form-card-container">
               <div className="card form-card">
                 <h2>Connexion</h2>
                 <form onSubmit={handleLogin}>
                   <div className="form-group">
-                    <label>E-mail ou Identifiant</label>
-                    <input type="text" placeholder="Identifiant" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} required />
+                    <label>Identifiant ou Mail</label>
+                    <input type="text" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} required />
                   </div>
                   <div className="form-group">
                     <label>Mot de passe</label>
-                    <input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
                   </div>
                   <button type="submit" className="btn-download">Se connecter</button>
                 </form>
@@ -465,7 +509,6 @@ function App() {
             </div>
           )}
 
-          {/* VUE : REGISTER */}
           {vueActuelle === 'register' && (
             <div className="form-card-container">
               <div className="card form-card">
@@ -476,7 +519,7 @@ function App() {
                     <input type="text" placeholder="Nom" value={nom} onChange={(e) => setNom(e.target.value)} required />
                   </div>
                   <input type="email" placeholder="Adresse Email" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} required />
-                  <input type="password" placeholder="Mot de passe (6+ car.)" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" />
+                  <input type="password" placeholder="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" />
                   <div className="form-row">
                     <select value={roleInscription} onChange={(e) => setRoleInscription(e.target.value)}>
                       <option value="etudiant">Étudiant</option>
@@ -488,14 +531,29 @@ function App() {
                       </select>
                     )}
                   </div>
-                  <button type="submit" className="btn-download">S'inscrire</button>
+                  
+                  {roleInscription === 'enseignant' && (
+                     <div style={{ marginTop: '10px', textAlign: 'left', padding: '0.75rem', borderRadius: '8px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-color)' }}>
+                       <label style={{ display: 'block', marginBottom: '8px', fontWeight: 'bold', fontSize: '0.9rem' }}>Cochez vos classes :</label>
+                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                         {CLASSES_DISPOS.map(c => (
+                           <label key={c} style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                             <input type="checkbox" checked={classesEnseignant.includes(c)} onChange={(e) => {
+                                 if (e.target.checked) setClassesEnseignant([...classesEnseignant, c]);
+                                 else setClassesEnseignant(classesEnseignant.filter(cls => cls !== c));
+                               }} /> {c}
+                           </label>
+                         ))}
+                       </div>
+                     </div>
+                  )}
+                  <button type="submit" className="btn-download" style={{marginTop:'15px'}}>S'inscrire</button>
                 </form>
                 <button onClick={() => setVueActuelle('login')} className="btn-secondary" style={{marginTop: '1rem', width: '100%'}}>Déjà inscrit ?</button>
               </div>
             </div>
           )}
 
-          {/* VUE : CREATE SAE */}
           {vueActuelle === 'create-sae' && (
             <div className="form-card-container">
               <div className="card form-card" style={{maxWidth:'600px'}}>
@@ -503,7 +561,7 @@ function App() {
                 <form onSubmit={handleCreateSae}>
                   <div className="form-group">
                     <label>Nom de la SAE</label>
-                    <input type="text" placeholder="ex: SAE 3.01 - Développement Web" value={nomSae} onChange={(e) => setNomSae(e.target.value)} required />
+                    <input type="text" value={nomSae} onChange={(e) => setNomSae(e.target.value)} required />
                   </div>
                   <div className="form-row">
                     <div className="form-group" style={{flex:1}}>
@@ -513,14 +571,14 @@ function App() {
                     <div className="form-group" style={{flex:1}}>
                       <label>Classe cible</label>
                       <select value={classeCible} onChange={(e) => setClasseCible(e.target.value)}>
-                        <option value="Toutes">Toutes les classes</option>
-                        {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
+                        <option value="Toutes">Toutes mes classes</option>
+                        {classesDuProf.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                   </div>
                   <div className="form-group">
                     <label>Description / Consignes</label>
-                    <textarea placeholder="Décrivez les objectifs et livrables..." value={descriptionSae} onChange={(e) => setDescriptionSae(e.target.value)} required />
+                    <textarea value={descriptionSae} onChange={(e) => setDescriptionSae(e.target.value)} required />
                   </div>
                   <div className="form-group">
                     <label>Fichiers joints (PDF)</label>
@@ -535,7 +593,6 @@ function App() {
             </div>
           )}
 
-          {/* NOUVEAU : VUE ÉDITION DE SAE */}
           {vueActuelle === 'edit-sae' && (
             <div className="form-card-container">
               <div className="card form-card" style={{maxWidth:'600px'}}>
@@ -553,8 +610,8 @@ function App() {
                     <div className="form-group" style={{flex:1}}>
                       <label>Classe cible</label>
                       <select value={classeCible} onChange={(e) => setClasseCible(e.target.value)}>
-                        <option value="Toutes">Toutes les classes</option>
-                        {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
+                        <option value="Toutes">Toutes mes classes</option>
+                        {classesDuProf.map(c => <option key={c} value={c}>{c}</option>)}
                       </select>
                     </div>
                   </div>
@@ -565,7 +622,6 @@ function App() {
                   <div className="form-group">
                     <label>Ajouter des fichiers joints</label>
                     <input type="file" multiple onChange={(e) => setFichiersSae(Array.from(e.target.files))} />
-                    <p style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>Les nouveaux fichiers seront ajoutés aux fichiers existants.</p>
                   </div>
                   <div style={{display:'flex', gap:'10px'}}>
                     <button type="submit" className="btn-download" style={{flex:2}}>Enregistrer les modifications</button>
@@ -575,13 +631,63 @@ function App() {
               </div>
             </div>
           )}
-          
-          {/* VUE : ADMIN */}
+
+          {vueActuelle === 'profile' && (
+            <div className="form-card-container">
+              <div className="card form-card" style={{maxWidth:'600px'}}>
+                <h2>👤 Mon Compte</h2>
+                {profilMessage && <div className="alert alert-success">{profilMessage}</div>}
+                
+                <form onSubmit={handleUpdateProfile}>
+                  <div className="form-row">
+                    <div className="form-group" style={{flex:1}}>
+                       <label>Prénom</label>
+                       <input type="text" value={profilData.prenom} onChange={(e) => setProfilData({...profilData, prenom: e.target.value})} required/>
+                    </div>
+                    <div className="form-group" style={{flex:1}}>
+                       <label>Nom</label>
+                       <input type="text" value={profilData.nom} onChange={(e) => setProfilData({...profilData, nom: e.target.value})} required/>
+                    </div>
+                  </div>
+                  
+                  <div className="form-group">
+                     <label>Adresse e-mail</label>
+                     <input type="email" value={profilData.mail} onChange={(e) => setProfilData({...profilData, mail: e.target.value})} required />
+                  </div>
+
+                  <div className="form-group">
+                    <label>Mes classes (Mises à jour)</label>
+                    {role === 'etudiant' ? (
+                        <select value={profilData.classeEtudiant} onChange={(e) => setProfilData({...profilData, classeEtudiant: e.target.value})}>
+                          {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', padding: '10px', backgroundColor:'var(--bg-color)', border:'1px solid var(--border-color)', borderRadius:'8px' }}>
+                          {CLASSES_DISPOS.map(c => (
+                            <label key={c} style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                              <input type="checkbox" checked={profilData.classesEns.includes(c)} onChange={(e) => {
+                                  if (e.target.checked) setProfilData({...profilData, classesEns: [...profilData.classesEns, c]});
+                                  else setProfilData({...profilData, classesEns: profilData.classesEns.filter(cls => cls !== c)});
+                                }} /> {c}
+                            </label>
+                          ))}
+                        </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
+                    <button type="submit" className="btn-download" style={{ flex: 2 }}>Enregistrer</button>
+                    <button type="button" onClick={() => setVueActuelle('dashboard')} className="btn-secondary" style={{ flex: 1 }}>Retour</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
           {vueActuelle === 'admin' && (
             <div className="admin-layout">
               <div className="card" style={{marginBottom: '2rem'}}>
                 <h2>Générateur de données</h2>
-                <p className="text-muted" style={{marginBottom:'1rem'}}>Outil de développement pour remplir la base de données.</p>
                 <div className="form-row" style={{alignItems:'center', gap:'20px'}}>
                   <input type="number" min="1" max="50" value={quantiteGeneration} onChange={(e) => setQuantiteGeneration(e.target.value)} style={{width:'100px'}} />
                   <button onClick={() => handleGenerate('users')} className="btn-secondary">👤 Générer Utilisateurs</button>
@@ -608,7 +714,7 @@ function App() {
                           <td style={{fontWeight:'600'}}>{user.prenom} {user.nom}</td>
                           <td className="text-muted">{user.mail}</td>
                           <td><span className={`badge badge-${user.role === 'admin' ? 'warning' : user.role === 'enseignant' ? 'success' : 'primary'}`}>{user.role}</span></td>
-                          <td>{user.classe || '-'}</td>
+                          <td>{user.classe && user.classe.startsWith('[') ? JSON.parse(user.classe).join(', ') : (user.classe || '-')}</td>
                           <td>
                             {user.role !== 'admin' && (
                               <button onClick={() => handleImpersonate(user.id)} className="btn-small">🔗 Se connecter</button>
@@ -622,6 +728,7 @@ function App() {
               </div>
             </div>
           )}
+
         </div>
       </main>
     </div>

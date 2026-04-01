@@ -9,139 +9,104 @@ export const saeService = {
     if (!response.ok) throw new Error("Erreur de chargement");
     return await response.json();
   },
-
   login: async (mail, password) => { 
     const response = await fetch(`${API_BASE_URL}/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mail, password })
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mail, password })
     });
-    if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.message || "Échec de la connexion");
-    }
+    if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
     return await response.json(); 
   },
-
   register: async (userData) => {
     const response = await fetch(`${API_BASE_URL}/register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userData)
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(userData)
     });
-    if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.message || "Échec de l'inscription");
-    }
+    if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
     return await response.json(); 
   },
-
   createSae: async (formData, token) => {
     const response = await fetch(`${API_BASE_URL}/sae`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: formData 
+      method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData 
     });
-    if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.message || "Échec de la création");
-    }
+    if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
     return await response.json(); 
   },
-
-  // NOUVEAU : Modifier une SAE
   updateSae: async (saeId, formData, token) => {
     const response = await fetch(`${API_BASE_URL}/sae/${saeId}`, {
-      method: 'PUT',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: formData 
+      method: 'PUT', headers: { 'Authorization': `Bearer ${token}` }, body: formData 
     });
-    if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.message || "Échec de la modification");
-    }
+    if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
     return await response.json(); 
   },
-
   getListeSae: async (token) => {
-    const options = {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
-    };
-    const response = await fetch(`${API_BASE_URL}/sae`, options);
-    if (!response.ok) throw new Error(`Erreur HTTP ${response.status}`);
+    const response = await fetch(`${API_BASE_URL}/sae`, {
+      method: 'GET', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error(`Erreur HTTP`);
     return await response.json();
   },
-
-  // NOUVEAU : Récupérer les détails d'une SAE spécifique
   getSaeDetails: async (saeId, token) => {
     const response = await fetch(`${API_BASE_URL}/sae/${saeId}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    if (!response.ok) throw new Error("Impossible de charger les détails");
+    if (!response.ok) throw new Error("Impossible de charger");
     return await response.json();
   },
-
-  // NOUVEAU : Soumettre le rendu
   soumettreRendu: async (saeId, formData, token) => {
     const response = await fetch(`${API_BASE_URL}/sae/${saeId}/rendu`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: formData
+      method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData
     });
-    if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.message || "Échec de la soumission");
-    }
+    if (!response.ok) { const err = await response.json(); throw new Error(err.message); }
     return await response.json(); 
   },
-
   generateMockData: async (type, count, token) => {
     const response = await fetch(`${API_BASE_URL}/admin/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ type, count })
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ type, count })
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.message || "Échec de la génération");
+    if (!response.ok) throw new Error(data.message);
     return data;
   },
-
   getAllUsers: async (token) => {
-    const response = await fetch(`${API_BASE_URL}/admin/users`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const response = await fetch(`${API_BASE_URL}/admin/users`, { headers: { 'Authorization': `Bearer ${token}` } });
     if (!response.ok) throw new Error("Erreur");
     return await response.json();
   },
-
   impersonateUser: async (userId, token) => {
     const response = await fetch(`${API_BASE_URL}/admin/impersonate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ userId })
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ userId })
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.message || "Impossible de se connecter");
+    if (!response.ok) throw new Error(data.message);
     return data;
   },
-
   getMyProfile: async (token) => {
-    const response = await fetch(`${API_BASE_URL}/users/me`, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
+    const response = await fetch(`${API_BASE_URL}/users/me`, { headers: { 'Authorization': `Bearer ${token}` } });
     if (!response.ok) throw new Error("Erreur");
     return await response.json();
   },
-
   updateProfile: async (profileData, token) => {
     const response = await fetch(`${API_BASE_URL}/users/me`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify(profileData)
+      method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(profileData)
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.message || "Erreur");
+    if (!response.ok) throw new Error(data.message);
     return data;
+  },
+  // NOUVEAU : Fonctions de gestion de classe pour le professeur
+  getEtudiants: async (token) => {
+    const response = await fetch(`${API_BASE_URL}/enseignant/etudiants`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error("Erreur lors de la récupération des étudiants");
+    return await response.json();
+  },
+  updateEtudiantClasse: async (etudiantId, nouvelleClasse, token) => {
+    const response = await fetch(`${API_BASE_URL}/enseignant/etudiants/${etudiantId}/classe`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ nouvelleClasse })
+    });
+    if (!response.ok) throw new Error("Échec de l'assignation");
+    return await response.json();
   }
 };
