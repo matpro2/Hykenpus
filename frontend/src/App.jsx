@@ -73,7 +73,11 @@ function App() {
   useEffect(() => {
     setLoading(true); setErreur(null);
     if (token) {
-      if (['public', 'login', 'register'].includes(vueActuelle)) setVueActuelle('dashboard');
+      // Redirection : l'admin va sur son panneau, les autres sur le dashboard
+      if (['public', 'login', 'register'].includes(vueActuelle)) {
+        setVueActuelle(role === 'admin' ? 'admin' : 'dashboard');
+      }
+      
       saeService.getListeSae(token).then(setSaes).catch(handleLogout).finally(() => setLoading(false));
       saeService.getAnnonces(token).then(setAnnonces).catch(console.error);
 
@@ -95,7 +99,8 @@ function App() {
     e.preventDefault(); setErreur(null);
     try {
       const data = await saeService.login(identifiant, password);
-      saveAuthData(data); setVueActuelle('dashboard');
+      saveAuthData(data); 
+      setVueActuelle(data.role === 'admin' ? 'admin' : 'dashboard');
     } catch (err) { setErreur(err.message); }
   };
 
@@ -308,69 +313,68 @@ function App() {
     <div className="app-container">
       {/* SIDEBAR */}
       <aside className="sidebar">
-        <div className="logo">🛡️ MMI Hub</div>
+        <div className="logo">
+          <span style={{background: 'var(--primary)', color: 'white', padding: '5px 8px', borderRadius: '8px'}}>HK</span>
+          <span>Hykenpus</span>
+        </div>
+        
         <nav className="nav-group">
-          <span className="nav-label">Navigation</span>
-          <div className={`nav-item ${['dashboard', 'public'].includes(vueActuelle) ? 'active' : ''}`} onClick={() => setVueActuelle(token ? 'dashboard' : 'public')}>
-            🏠 Tableau de bord
-          </div>
+          {/* Dashboard uniquement pour les non-admins */}
+          {role !== 'admin' && (
+            <>
+              <span className="nav-label">Menu Principal</span>
+              <div className={`nav-item ${['dashboard', 'public'].includes(vueActuelle) ? 'active' : ''}`} 
+                   onClick={() => setVueActuelle(token ? 'dashboard' : 'public')}>
+                <i className="fa-solid fa-house icon"></i> <span>Dashboard</span>
+              </div>
+            </>
+          )}
           
           {token && (role === 'enseignant' || role === 'admin') && (
-            <div className={`nav-item ${vueActuelle === 'create-sae' ? 'active' : ''}`} onClick={() => setVueActuelle('create-sae')}>
-              ➕ Créer une SAE
-            </div>
-          )}
-
-          {token && (role === 'enseignant' || role === 'admin') && (
-             <div className={`nav-item ${vueActuelle === 'create-annonce' ? 'active' : ''}`} onClick={() => setVueActuelle('create-annonce')}>
-                📢 Nouvelle Annonce
-             </div>
+            <>
+              <span className="nav-label">Sujets</span>
+              <div className={`nav-item ${vueActuelle === 'create-sae' ? 'active' : ''}`} onClick={() => setVueActuelle('create-sae')}>
+                <i className="fa-solid fa-folder-plus icon"></i> <span>Nouveau Sujet</span>
+              </div>
+              <div className={`nav-item ${vueActuelle === 'create-annonce' ? 'active' : ''}`} onClick={() => setVueActuelle('create-annonce')}>
+                <i className="fa-solid fa-bullhorn icon"></i> <span>Annonces</span>
+              </div>
+            </>
           )}
 
           {token && role === 'enseignant' && classesDuProf.length > 0 && (
              <>
-               <span className="nav-label" style={{marginTop: '20px'}}>Mes Classes</span>
+               <span className="nav-label">Mes Classes</span>
                {classesDuProf.map(c => (
                   <div key={c} 
                        className={`nav-item ${vueActuelle === 'gestion-classe' && classeGeree === c ? 'active' : ''}`} 
                        onClick={() => { setClasseGeree(c); setVueActuelle('gestion-classe'); }}>
-                     🎓 Classe {c}
+                    <i className="fa-solid fa-graduation-cap icon"></i> <span>Classe {c}</span>
                   </div>
                ))}
              </>
           )}
 
           {token && role === 'admin' && (
-            <div className={`nav-item ${vueActuelle === 'admin' ? 'active' : ''}`} onClick={() => setVueActuelle('admin')}>
-              👑 Administration
-            </div>
+            <>
+              <span className="nav-label">Système</span>
+              <div className={`nav-item ${vueActuelle === 'admin' ? 'active' : ''}`} onClick={() => setVueActuelle('admin')}>
+                <i className="fa-solid fa-shield-halved icon"></i> <span>Administration</span>
+              </div>
+            </>
           )}
-
-          <div className="nav-item theme-toggle" onClick={toggleTheme} style={{marginTop: 'auto', borderTop: '1px solid var(--border-color)', paddingTop: '1rem'}}>
-            {isDarkMode ? '☀️ Mode Clair' : '🌙 Mode Sombre'}
-          </div>
         </nav>
 
         <div className="sidebar-footer">
-          {token ? (
-            <div className="user-profile">
-              <div className="user-info">
-                <span className="user-name">{prenomUser}</span>
-                <span className="user-role">{role}</span>
-              </div>
-              <button onClick={handleLogout} className="btn-icon-logout" title="Déconnexion">🚪</button>
-            </div>
-          ) : (
-            <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
-              <button onClick={() => setVueActuelle('login')} className="btn-download">Connexion</button>
-              <button onClick={() => setVueActuelle('register')} className="btn-secondary" style={{width:'100%'}}>S'inscrire</button>
-            </div>
-          )}
+          <div className="nav-item theme-toggle" onClick={toggleTheme}>
+            <i className={`fa-solid ${isDarkMode ? 'fa-sun' : 'fa-moon'} icon`}></i> 
+            <span>{isDarkMode ? 'Mode Clair' : 'Mode Sombre'}</span>
+          </div>
         </div>
       </aside>
 
       {/* MAIN CONTENT */}
-      <main className="main-layout">
+      <main className="main-layout" style={{flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden'}}>
         <header className="header">
           <div className="header-left">
             <h1>{
@@ -386,88 +390,65 @@ function App() {
             {token && <div className="badge badge-primary">Session 2025-2026</div>}
           </div>
           
-          <div style={{ display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap' }}>
-            {role === 'etudiant' && vueActuelle === 'dashboard' && (
-              <div style={{ display: 'flex', gap: '15px', backgroundColor: 'var(--bg-color)', padding: '8px 15px', borderRadius: '8px', border: '1px solid var(--border-color)', alignItems: 'center' }}>
-                <span style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>Afficher :</span>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                  <input type="checkbox" checked={filtresStatut.includes('En cours')} onChange={() => toggleFiltreStatut('En cours')} /> En cours
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                  <input type="checkbox" checked={filtresStatut.includes('En retard')} onChange={() => toggleFiltreStatut('En retard')} /> En retard
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer', fontSize: '0.9rem' }}>
-                  <input type="checkbox" checked={filtresStatut.includes('Terminée')} onChange={() => toggleFiltreStatut('Terminée')} /> Terminées
-                </label>
-              </div>
+          <div className="header-actions" style={{display: 'flex', gap: '20px', alignItems: 'center'}}>
+            {/* FILTRES ET TRI : uniquement si pas admin et sur dashboard */}
+            {role !== 'admin' && (vueActuelle === 'dashboard' || vueActuelle === 'public') && (
+              <>
+                {role === 'etudiant' && (
+                  <div className="filter-group" style={{ display: 'flex', gap: '10px', alignItems: 'center', fontSize: '0.85rem' }}>
+                    <label><input type="checkbox" checked={filtresStatut.includes('En cours')} onChange={() => toggleFiltreStatut('En cours')} /> En cours</label>
+                    <label><input type="checkbox" checked={filtresStatut.includes('En retard')} onChange={() => toggleFiltreStatut('En retard')} /> En retard</label>
+                    <label><input type="checkbox" checked={filtresStatut.includes('Terminée')} onChange={() => toggleFiltreStatut('Terminée')} /> Terminées</label>
+                  </div>
+                )}
+                <select className="tri-select" value={triDate} onChange={(e) => setTriDate(e.target.value)}>
+                  <option value="asc">Tri : Proche</option>
+                  <option value="desc">Tri : Lointain</option>
+                </select>
+              </>
             )}
 
-            {(vueActuelle === 'dashboard' || vueActuelle === 'public') && (
-              <select className="tri-select" value={triDate} onChange={(e) => setTriDate(e.target.value)}>
-                <option value="asc">Date : Plus proche</option>
-                <option value="desc">Date : Plus lointaine</option>
-              </select>
-            )}
-
-            {token && (
-              <button onClick={openProfilePage} className="btn-secondary" style={{ padding: '8px 15px', margin: 0 }}>👤 Mon Compte</button>
-            )}
+            {/* ESPACE COMPTE (DROITE) */}
+            <div className="header-user-zone" style={{ display: 'flex', alignItems: 'center', gap: '15px', paddingLeft: '15px', borderLeft: '1px solid var(--border)' }}>
+              {token ? (
+                <>
+                  <div className="user-profile-header" onClick={openProfilePage} style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                    <span className="user-name" style={{ fontWeight: '600', fontSize: '0.9rem' }}>{prenomUser}</span>
+                    <span className="user-role" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>{role}</span>
+                  </div>
+                  <button onClick={handleLogout} className="btn-icon-logout" style={{ background: 'var(--primary-soft)', border: 'none', color: 'var(--primary)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', transition: '0.2s' }}>
+                    <i className="fa-solid fa-right-from-bracket"></i>
+                  </button>
+                </>
+              ) : (
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button onClick={() => setVueActuelle('login')} className="btn-primary" style={{ padding: '8px 15px' }}>Connexion</button>
+                  <button onClick={() => setVueActuelle('register')} className="btn-secondary" style={{ padding: '8px 15px', margin: 0 }}>S'inscrire</button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
         <div className="content-scroll">
-          {erreur && <div className="alert alert-danger">{erreur}</div>}
+          {erreur && <div className="alert alert-danger" style={{animation: 'slideIn 0.3s ease'}}>{erreur}</div>}
           {succes && <div className="alert alert-success">{succes}</div>}
 
-          {/* VUE : GESTION DES CLASSES */}
-          {vueActuelle === 'gestion-classe' && role === 'enseignant' && (
-             <div style={{display: 'flex', gap: '20px', alignItems: 'flex-start'}}>
-                <div className="card" style={{flex: 1}}>
-                   <h2>Élèves de {classeGeree}</h2>
-                   <ul style={{listStyle: 'none', padding: 0, marginTop: '15px'}}>
-                      {etudiants.filter(e => e.classe === classeGeree).map(e => (
-                          <li key={e.id} style={{padding: '10px', borderBottom: '1px solid var(--border-color)'}}>
-                             <strong>{e.nom} {e.prenom}</strong> <br/>
-                             <span style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>📧 {e.mail}</span>
-                          </li>
-                      ))}
-                      {etudiants.filter(e => e.classe === classeGeree).length === 0 && (
-                          <li style={{color: 'var(--text-muted)'}}>Aucun élève dans cette classe.</li>
-                      )}
-                   </ul>
-                </div>
-                <div className="card" style={{flex: 1}}>
-                   <h2>Ajouter un élève</h2>
-                   <ul style={{listStyle: 'none', padding: 0, marginTop: '15px', maxHeight: '500px', overflowY: 'auto'}}>
-                      {etudiants.filter(e => e.classe !== classeGeree).map(e => (
-                          <li key={e.id} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid var(--border-color)'}}>
-                             <div>
-                                <strong>{e.nom} {e.prenom}</strong> <br/>
-                                <span style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>Classe actuelle : {e.classe || 'Aucune'}</span>
-                             </div>
-                             <button onClick={() => handleAssignerClasse(e.id, classeGeree)} className="btn-secondary" style={{padding: '5px 10px', margin: 0}}>➕ Ajouter</button>
-                          </li>
-                      ))}
-                   </ul>
-                </div>
-             </div>
-          )}
-
-          {/* AFFICHAGE DES ANNONCES */}
-          {token && (vueActuelle === 'dashboard') && annonces.length > 0 && (
-            <div style={{ marginBottom: '2.5rem' }}>
-               <h2 style={{ borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>📢 Annonces</h2>
+          {/* VUE : ANNONCES (Masqué pour admin) */}
+          {token && role !== 'admin' && (vueActuelle === 'dashboard') && annonces.length > 0 && (
+            <div style={{ marginBottom: '2rem' }}>
+               <h2 style={{ marginBottom: '1rem' }}><i className="fa-solid fa-bullhorn" style={{marginRight: '10px', color: 'var(--primary)'}}></i> Annonces récentes</h2>
                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {annonces.map(ann => (
-                     <div key={ann.id} style={{ backgroundColor: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
-                           <strong style={{ color: 'var(--primary)' }}>{ann.prenom} {ann.nom} <span className="badge badge-primary" style={{ marginLeft: '10px' }}>{ann.classe_cible}</span></strong>
-                           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDateTime(ann.date_creation)}</span>
+                     <div key={ann.id} className="card" style={{ padding: '1.25rem', cursor: 'default' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                           <strong style={{ color: 'var(--primary)' }}>{ann.prenom} {ann.nom} <span className="badge badge-primary">{ann.classe_cible}</span></strong>
+                           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}><i className="fa-solid fa-calendar-day" style={{marginRight: '5px'}}></i>{formatDateTime(ann.date_creation)}</span>
                         </div>
-                        <p style={{ whiteSpace: 'pre-line', margin: '0 0 15px 0' }}>{ann.message}</p>
+                        <p style={{ whiteSpace: 'pre-line', fontSize: '0.95rem' }}>{ann.message}</p>
                         {ann.sae_id && (
-                           <button onClick={() => openSaeDetails(ann.sae_id)} className="btn-secondary" style={{ margin: 0, padding: '5px 10px', fontSize: '0.9rem' }}>
-                              🔗 Accéder à la SAE : {ann.sae_nom}
+                           <button onClick={() => openSaeDetails(ann.sae_id)} className="btn-secondary" style={{ marginTop: '12px', fontSize: '0.85rem' }}>
+                             <i className="fa-solid fa-link" style={{marginRight: '8px'}}></i> Voir SAE : {ann.sae_nom}
                            </button>
                         )}
                      </div>
@@ -476,51 +457,42 @@ function App() {
             </div>
           )}
 
-          {/* VUE : DASHBOARD / PUBLIC */}
-          {(vueActuelle === 'dashboard' || vueActuelle === 'public') && (
+          {/* VUE : DASHBOARD / PUBLIC (Grille de SAEs) - MASQUÉ POUR ADMIN */}
+          {(vueActuelle === 'dashboard' || vueActuelle === 'public') && role !== 'admin' && (
             <div className="sae-grid">
               {loading ? <p>Chargement des ressources...</p> : 
-               getSaesTriees(saes).length > 0 ? getSaesTriees(saes).map(sae => {
-                 const statut = determinerStatut(sae);
-                 let pourcentage = 0;
-                 if (role === 'enseignant' && sae.nb_etudiants_cibles > 0) {
-                     pourcentage = Math.round((sae.nb_rendus / sae.nb_etudiants_cibles) * 100);
-                 }
-                 return (
-                  <div key={sae.id} className="card" style={{ cursor: token ? 'pointer' : 'default' }} onClick={() => token && openSaeDetails(sae.id)}>
-                    <div className="card-header">
+               getSaesTriees(saes).map(sae => {
+                const statut = determinerStatut(sae);
+                const pourcentage = sae.nb_etudiants_cibles > 0 ? Math.round((sae.nb_rendus / sae.nb_etudiants_cibles) * 100) : 0;
+                
+                return (
+                  <div key={sae.id} className="card" onClick={() => token && openSaeDetails(sae.id)}>
+                    <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                       <span className="badge badge-primary">{sae.classe_cible}</span>
-                      {role === 'etudiant' && <span className={`badge badge-${statut.couleur}`}>{statut.texte}</span>}
-                      {sae.statut === 'en_attente' && <span style={{backgroundColor: '#f59e0b', color: '#fff', padding: '3px 8px', borderRadius: '12px', fontSize: '0.8rem', marginLeft: '10px'}}>⚠️ En attente de validation</span>}
+                      <span className={`badge badge-${statut.couleur}`}>{statut.texte}</span>
                     </div>
                     
-                    {role === 'admin' && sae.statut === 'en_attente' && (
-                       <button onClick={(e) => handleValidateSae(sae.id, e)} style={{background: '#10b981', color: 'white', padding: '8px', border: 'none', borderRadius: '5px', width: '100%', marginTop: '10px', cursor: 'pointer'}}>
-                          ✅ Valider et Publier cette SAE
-                       </button>
-                    )}
-
                     <h3 className="card-title">{sae.nom}</h3>
-                    <p className="card-desc" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{sae.description}</p>
-                    <div className="card-meta">
-                      {sae.date_rendu && <span>📅 À rendre : {formatDateTime(sae.date_rendu)}</span>}
+                    <p className="card-desc">{sae.description.substring(0, 100)}...</p>
+                    
+                    <div className="card-footer" style={{marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--border-color)'}}>
+                      <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '8px'}}>
+                        <span style={{color: 'var(--text-muted)'}}><i className="fa-solid fa-calendar-days" style={{marginRight: '5px'}}></i> {formatDateTime(sae.date_rendu) || 'Sans date'}</span>
+                      </div>
+                      
+                      {role === 'enseignant' && (
+                        <div className="progress-section" style={{marginTop: '10px'}}>
+                          <div className="progress-container" style={{height: '6px', backgroundColor: 'var(--border)', borderRadius: '10px', overflow: 'hidden', marginBottom: '5px'}}>
+                            <div className="progress-bar" style={{width: `${pourcentage}%`, height: '100%', backgroundColor: 'var(--primary)'}}></div>
+                          </div>
+                          <span style={{fontSize: '0.75rem', fontWeight: '600'}}>{pourcentage}% rendus</span>
+                        </div>
+                      )}
                     </div>
-                    {role === 'enseignant' && (
-                       <div style={{ marginTop: '15px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                             <span>Progression des rendus</span>
-                             <span>{sae.nb_rendus} / {sae.nb_etudiants_cibles} ({pourcentage}%)</span>
-                          </div>
-                          <div style={{ width: '100%', backgroundColor: '#e2e8f0', borderRadius: '4px', height: '8px', overflow: 'hidden' }}>
-                             <div style={{ width: `${pourcentage}%`, backgroundColor: pourcentage === 100 ? 'var(--success)' : 'var(--primary)', height: '100%', transition: 'width 0.3s' }}></div>
-                          </div>
-                       </div>
-                    )}
-                    {token && role === 'etudiant' && <button className="btn-secondary" style={{width:'100%', marginTop:'1rem'}}>Voir & Rendre le travail</button>}
-                    {token && role !== 'etudiant' && <button className="btn-secondary" style={{width:'100%', marginTop:'1rem'}}>Ouvrir la SAE</button>}
                   </div>
-                 );
-              }) : <p className="text-muted">Aucune SAE ne correspond à vos filtres.</p>}
+                );
+              })}
+              {!loading && saes.length === 0 && <p className="text-muted">Aucune SAE disponible.</p>}
             </div>
           )}
 
@@ -529,27 +501,27 @@ function App() {
             <div className="admin-layout">
               <div className="card" style={{marginBottom: '2rem'}}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
-                   <h2>{selectedSae.nom}</h2>
-                   <div>
-                     {(role === 'enseignant' || role === 'admin') && (
-                        <button onClick={() => openEditSae(selectedSae)} className="btn-primary" style={{marginRight: '10px', background: '#3b82f6', borderColor: '#3b82f6'}}>✏️ Modifier</button>
-                     )}
-                     <button onClick={() => setVueActuelle('dashboard')} className="btn-secondary">🔙 Retour</button>
-                   </div>
+                    <h2>{selectedSae.nom}</h2>
+                    <div style={{display:'flex', gap:'10px'}}>
+                      {(role === 'enseignant' || role === 'admin') && (
+                         <button onClick={() => openEditSae(selectedSae)} className="btn-primary"><i className="fa-solid fa-pen-to-square" style={{marginRight: '8px'}}></i> Modifier</button>
+                      )}
+                      <button onClick={() => setVueActuelle(role === 'admin' ? 'admin' : 'dashboard')} className="btn-secondary"><i className="fa-solid fa-arrow-left" style={{marginRight: '8px'}}></i> Retour</button>
+                    </div>
                 </div>
-                {selectedSae.date_rendu && <p style={{fontWeight:'bold', color:'var(--danger)', marginTop:'10px'}}>📅 Date limite : {formatDateTime(selectedSae.date_rendu)}</p>}
+                {selectedSae.date_rendu && <p style={{fontWeight:'bold', color:'var(--danger)', marginTop:'10px'}}><i className="fa-solid fa-clock" style={{marginRight: '8px'}}></i> Date limite : {formatDateTime(selectedSae.date_rendu)}</p>}
                 
-                <div style={{backgroundColor: 'var(--bg-color)', padding: '1rem', borderRadius: '8px', marginTop: '1rem', border: '1px solid var(--border-color)'}}>
-                   <p style={{whiteSpace: 'pre-line'}}>{selectedSae.description}</p>
+                <div style={{backgroundColor: 'var(--bg-main)', padding: '1.25rem', borderRadius: '8px', marginTop: '1.25rem', border: '1px solid var(--border)'}}>
+                    <p style={{whiteSpace: 'pre-line'}}>{selectedSae.description}</p>
                 </div>
 
                 {selectedSae.documents && JSON.parse(selectedSae.documents).length > 0 && (
-                   <div style={{marginTop: '1.5rem'}}>
-                     <h3>📎 Ressources fournies</h3>
-                     <div className="file-links" style={{marginTop:'10px'}}>
+                   <div style={{marginTop: '2rem'}}>
+                     <h3><i className="fa-solid fa-paperclip" style={{marginRight: '10px'}}></i> Ressources fournies</h3>
+                     <div className="file-links" style={{marginTop:'12px', display:'flex', flexWrap:'wrap', gap:'10px'}}>
                         {JSON.parse(selectedSae.documents).map((file, i) => (
                           <a key={i} href={`${SERVER_URL}/uploads/${file}`} target="_blank" rel="noreferrer" className="btn-download">
-                            📄 {file.split('-').slice(1).join('-')}
+                            <i className="fa-solid fa-file-pdf"></i> {file.split('-').slice(1).join('-')}
                           </a>
                         ))}
                      </div>
@@ -558,56 +530,52 @@ function App() {
               </div>
 
               {role === 'etudiant' && (
-                 <div className="card" style={{border: selectedRendu ? '2px solid var(--success)' : '2px solid var(--primary)'}}>
-                    <h2 style={{color: selectedRendu ? 'var(--success)' : 'inherit'}}>
-                       {selectedRendu ? '✅ Mon travail rendu' : '📤 Déposer mon travail'}
-                    </h2>
-                    
-                    {selectedRendu ? (
-                       <div>
-                         <p style={{color: 'var(--text-muted)'}}>Soumis le : {formatDateTime(selectedRendu.date_soumission)}</p>
-                         <div className="file-links" style={{marginTop:'10px', marginBottom: '1.5rem'}}>
-                            {JSON.parse(selectedRendu.documents).map((file, i) => (
-                              <a key={i} href={`${SERVER_URL}/uploads/${file}`} target="_blank" rel="noreferrer" className="btn-secondary">
-                                📁 {file.split('-').slice(1).join('-')}
-                              </a>
-                            ))}
-                         </div>
-                         <hr style={{borderColor: 'var(--border-color)', margin: '1rem 0'}}/>
-                         <p style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Vous pouvez écraser votre rendu en déposant de nouveaux fichiers.</p>
-                       </div>
-                    ) : (
-                       <p style={{color: 'var(--text-muted)', marginBottom: '1rem'}}>
-                          Sélectionnez vos fichiers (PDF, ZIP, Word...) pour valider cette SAE.
-                       </p>
-                    )}
-
-                    <form onSubmit={handleSubmitRendu} style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
-                       <input type="file" multiple required onChange={(e) => setFichiersRendu(Array.from(e.target.files))} style={{flex: 1, padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: '6px'}}/>
-                       <button type="submit" className="btn-download" style={{margin: 0}}>{selectedRendu ? 'Mettre à jour' : 'Envoyer'}</button>
-                    </form>
-                 </div>
+                  <div className="card" style={{border: selectedRendu ? '2px solid var(--success)' : '2px solid var(--primary)'}}>
+                     <h2 style={{color: selectedRendu ? 'var(--success)' : 'inherit'}}>
+                         {selectedRendu ? <><i className="fa-solid fa-circle-check" style={{marginRight: '10px'}}></i> Travail rendu</> : <><i className="fa-solid fa-upload" style={{marginRight: '10px'}}></i> Déposer mon travail</>}
+                     </h2>
+                     {selectedRendu ? (
+                        <div>
+                          <p style={{color: 'var(--text-muted)'}}>Soumis le : {formatDateTime(selectedRendu.date_soumission)}</p>
+                          <div className="file-links" style={{marginTop:'12px', marginBottom: '1.5rem', display:'flex', gap:'10px'}}>
+                             {JSON.parse(selectedRendu.documents).map((file, i) => (
+                               <a key={i} href={`${SERVER_URL}/uploads/${file}`} target="_blank" rel="noreferrer" className="btn-secondary">
+                                 <i className="fa-solid fa-file-arrow-up"></i> {file.split('-').slice(1).join('-')}
+                               </a>
+                             ))}
+                          </div>
+                        </div>
+                     ) : (
+                        <p style={{color: 'var(--text-muted)', marginBottom: '1.25rem'}}>Sélectionnez vos fichiers (PDF, ZIP...) pour valider cette SAE.</p>
+                     )}
+                     <form onSubmit={handleSubmitRendu} style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                        <input type="file" multiple required onChange={(e) => setFichiersRendu(Array.from(e.target.files))} style={{flex: 1}}/>
+                        <button type="submit" className="btn-primary" style={{margin: 0}}>
+                          <i className="fa-solid fa-paper-plane" style={{marginRight: '8px'}}></i> {selectedRendu ? 'Mettre à jour' : 'Envoyer'}
+                        </button>
+                     </form>
+                  </div>
               )}
             </div>
           )}
-          
+
           {/* VUE : LOGIN */}
           {vueActuelle === 'login' && (
             <div className="form-card-container">
               <div className="card form-card">
-                <h2>Connexion</h2>
+                <h2 style={{textAlign:'center', marginBottom:'1.5rem'}}>Connexion</h2>
                 <form onSubmit={handleLogin}>
                   <div className="form-group">
                     <label>E-mail ou Identifiant</label>
-                    <input type="text" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} required />
+                    <input type="text" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} required placeholder="exemple@univ.fr" />
                   </div>
                   <div className="form-group">
                     <label>Mot de passe</label>
-                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                    <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
                   </div>
-                  <button type="submit" className="btn-download">Se connecter</button>
+                  <button type="submit" className="btn-primary" style={{width:'100%', marginTop:'0.5rem'}}>Se connecter</button>
                 </form>
-                <button onClick={() => setVueActuelle('public')} className="btn-secondary" style={{marginTop: '1rem', width: '100%'}}>Retour</button>
+                <button onClick={() => setVueActuelle('public')} className="btn-secondary" style={{marginTop: '1rem', width: '100%'}}>Retour à l'accueil</button>
               </div>
             </div>
           )}
@@ -616,191 +584,26 @@ function App() {
           {vueActuelle === 'register' && (
             <div className="form-card-container">
               <div className="card form-card">
-                <h2>Créer un compte étudiant</h2>
+                <h2 style={{textAlign:'center', marginBottom:'1.5rem'}}>Créer un compte</h2>
                 <form onSubmit={handleRegister}>
-                  <div className="form-row">
+                  <div className="form-row" style={{display:'flex', gap:'10px', marginBottom:'1rem'}}>
                     <input type="text" placeholder="Prénom" value={prenom} onChange={(e) => setPrenom(e.target.value)} required />
                     <input type="text" placeholder="Nom" value={nom} onChange={(e) => setNom(e.target.value)} required />
                   </div>
-                  <input type="email" placeholder="Adresse Email" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} required />
-                  <input type="password" placeholder="Mot de passe (6+ car.)" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" />
-                  
-                  <div className="form-group" style={{marginTop: '10px'}}>
+                  <div className="form-group">
+                    <input type="email" placeholder="Adresse Email" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} required />
+                  </div>
+                  <div className="form-group">
+                    <input type="password" placeholder="Mot de passe (6+ car.)" value={password} onChange={(e) => setPassword(e.target.value)} required minLength="6" />
+                  </div>
+                  <div className="form-group">
                     <label>Sélectionnez votre classe :</label>
                     <select value={classeInscription} onChange={(e) => setClasseInscription(e.target.value)}>
                       {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
-                  <button type="submit" className="btn-download" style={{marginTop:'15px'}}>S'inscrire</button>
-                </form>
-                <button onClick={() => setVueActuelle('login')} className="btn-secondary" style={{marginTop: '1rem', width: '100%'}}>Déjà inscrit ?</button>
-              </div>
-            </div>
-          )}
-
-          {/* VUE : CREATE SAE */}
-          {vueActuelle === 'create-sae' && (
-            <div className="form-card-container">
-              <div className="card form-card" style={{maxWidth:'600px'}}>
-                <h2>Publier un nouveau sujet</h2>
-                <form onSubmit={handleCreateSae}>
-                  <div className="form-group">
-                    <label>Nom de la SAE</label>
-                    <input type="text" value={nomSae} onChange={(e) => setNomSae(e.target.value)} required />
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group" style={{flex:1}}>
-                      <label>Date de rendu</label>
-                      <input type="datetime-local" value={dateRenduSae} onChange={(e) => setDateRenduSae(e.target.value)} required />
-                    </div>
-                    <div className="form-group" style={{flex:1}}>
-                      <label>Classe cible</label>
-                      <select value={classeCible} onChange={(e) => setClasseCible(e.target.value)}>
-                        <option value="Toutes">Toutes mes classes</option>
-                        {classesDuProf.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Description / Consignes</label>
-                    <textarea value={descriptionSae} onChange={(e) => setDescriptionSae(e.target.value)} required />
-                  </div>
-                  <div className="form-group">
-                    <label>Fichiers joints (PDF)</label>
-                    <input type="file" multiple onChange={(e) => setFichiersSae(Array.from(e.target.files))} />
-                  </div>
-                  <div style={{display:'flex', gap:'10px'}}>
-                    <button type="submit" className="btn-download" style={{flex:2}}>Publier la SAE</button>
-                    <button type="button" onClick={() => setVueActuelle('dashboard')} className="btn-secondary" style={{flex:1}}>Annuler</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* VUE : CRÉATION D'ANNONCE */}
-          {vueActuelle === 'create-annonce' && (
-            <div className="form-card-container">
-              <div className="card form-card" style={{maxWidth:'600px'}}>
-                <h2>📢 Envoyer une annonce</h2>
-                <form onSubmit={handleCreateAnnonce}>
-                  <div className="form-row">
-                    <div className="form-group" style={{flex:1}}>
-                      <label>Classe cible</label>
-                      <select value={classeCibleAnnonce} onChange={(e) => setClasseCibleAnnonce(e.target.value)}>
-                        <option value="Toutes">Toutes mes classes</option>
-                        {classesDuProf.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                    <div className="form-group" style={{flex:1}}>
-                      <label>Lier à une SAE (Optionnel)</label>
-                      <select value={saeLieeAnnonce} onChange={(e) => setSaeLieeAnnonce(e.target.value)}>
-                        <option value="">-- Aucune SAE --</option>
-                        {saes.map(sae => <option key={sae.id} value={sae.id}>{sae.nom}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Votre message</label>
-                    <textarea placeholder="Saisissez votre annonce ici..." value={messageAnnonce} onChange={(e) => setMessageAnnonce(e.target.value)} required style={{minHeight:'100px'}} />
-                  </div>
-                  <div style={{display:'flex', gap:'10px'}}>
-                    <button type="submit" className="btn-download" style={{flex:2}}>Publier l'annonce</button>
-                    <button type="button" onClick={() => setVueActuelle('dashboard')} className="btn-secondary" style={{flex:1}}>Annuler</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-          
-          {/* VUE : MODIFICATION SAE */}
-          {vueActuelle === 'edit-sae' && (
-            <div className="form-card-container">
-              <div className="card form-card" style={{maxWidth:'600px'}}>
-                <h2>Modifier la SAE</h2>
-                <form onSubmit={handleEditSae}>
-                  <div className="form-group">
-                    <label>Nom de la SAE</label>
-                    <input type="text" value={nomSae} onChange={(e) => setNomSae(e.target.value)} required />
-                  </div>
-                  <div className="form-row">
-                    <div className="form-group" style={{flex:1}}>
-                      <label>Date de rendu</label>
-                      <input type="datetime-local" value={dateRenduSae} onChange={(e) => setDateRenduSae(e.target.value)} required />
-                    </div>
-                    <div className="form-group" style={{flex:1}}>
-                      <label>Classe cible</label>
-                      <select value={classeCible} onChange={(e) => setClasseCible(e.target.value)}>
-                        <option value="Toutes">Toutes mes classes</option>
-                        {classesDuProf.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label>Description / Consignes</label>
-                    <textarea value={descriptionSae} onChange={(e) => setDescriptionSae(e.target.value)} required style={{minHeight:'150px'}} />
-                  </div>
-                  <div className="form-group">
-                    <label>Ajouter des fichiers joints</label>
-                    <input type="file" multiple onChange={(e) => setFichiersSae(Array.from(e.target.files))} />
-                  </div>
-                  <div style={{display:'flex', gap:'10px'}}>
-                    <button type="submit" className="btn-download" style={{flex:2}}>Enregistrer les modifications</button>
-                    <button type="button" onClick={() => { setSelectedSae(null); setVueActuelle('dashboard'); }} className="btn-secondary" style={{flex:1}}>Annuler</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* VUE : PROFIL */}
-          {vueActuelle === 'profile' && (
-            <div className="form-card-container">
-              <div className="card form-card" style={{maxWidth:'600px'}}>
-                <h2>👤 Mon Compte</h2>
-                {profilMessage && <div className="alert alert-success">{profilMessage}</div>}
-                
-                <form onSubmit={handleUpdateProfile}>
-                  <div className="form-row">
-                    <div className="form-group" style={{flex:1}}>
-                       <label>Prénom</label>
-                       <input type="text" value={profilData.prenom} onChange={(e) => setProfilData({...profilData, prenom: e.target.value})} required/>
-                    </div>
-                    <div className="form-group" style={{flex:1}}>
-                       <label>Nom</label>
-                       <input type="text" value={profilData.nom} onChange={(e) => setProfilData({...profilData, nom: e.target.value})} required/>
-                    </div>
-                  </div>
-                  
-                  <div className="form-group">
-                     <label>Adresse e-mail</label>
-                     <input type="email" value={profilData.mail} onChange={(e) => setProfilData({...profilData, mail: e.target.value})} required />
-                  </div>
-
-                  <div className="form-group">
-                    <label>Mes classes (Mises à jour)</label>
-                    {role === 'etudiant' ? (
-                        <select value={profilData.classeEtudiant} onChange={(e) => setProfilData({...profilData, classeEtudiant: e.target.value})}>
-                          {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                    ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', padding: '10px', backgroundColor:'var(--bg-color)', border:'1px solid var(--border-color)', borderRadius:'8px' }}>
-                          {CLASSES_DISPOS.map(c => (
-                            <label key={c} style={{ fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                              <input type="checkbox" checked={profilData.classesEns.includes(c)} onChange={(e) => {
-                                  if (e.target.checked) setProfilData({...profilData, classesEns: [...profilData.classesEns, c]});
-                                  else setProfilData({...profilData, classesEns: profilData.classesEns.filter(cls => cls !== c)});
-                                }} /> {c}
-                            </label>
-                          ))}
-                        </div>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
-                    <button type="submit" className="btn-download" style={{ flex: 2 }}>Enregistrer</button>
-                    <button type="button" onClick={() => setVueActuelle('dashboard')} className="btn-secondary" style={{ flex: 1 }}>Retour</button>
-                  </div>
+                  <button type="submit" className="btn-primary" style={{marginTop:'10px', width:'100%'}}>S'inscrire</button>
+                  <button type="button" onClick={() => setVueActuelle('login')} className="btn-secondary" style={{marginTop: '1rem', width: '100%'}}>Déjà inscrit ?</button>
                 </form>
               </div>
             </div>
@@ -810,96 +613,69 @@ function App() {
           {vueActuelle === 'admin' && (
             <div className="admin-layout">
               <div className="card" style={{marginBottom: '2rem'}}>
-                <h2>Générateur de données</h2>
-                <div className="form-row" style={{alignItems:'center', gap:'20px'}}>
-                  <input type="number" min="1" max="50" value={quantiteGeneration} onChange={(e) => setQuantiteGeneration(e.target.value)} style={{width:'100px'}} />
-                  <button onClick={() => handleGenerate('users')} className="btn-secondary">👤 Générer Utilisateurs</button>
-                  <button onClick={() => handleGenerate('saes')} className="btn-secondary">📚 Générer SAEs</button>
+                <h2><i className="fa-solid fa-gears" style={{marginRight: '10px'}}></i> Générateur de données</h2>
+                <div className="form-row" style={{display:'flex', alignItems:'center', gap:'15px', marginTop:'15px'}}>
+                  <input type="number" min="1" max="50" value={quantiteGeneration} onChange={(e) => setQuantiteGeneration(e.target.value)} style={{width:'80px'}} />
+                  <button onClick={() => handleGenerate('users')} className="btn-secondary"><i className="fa-solid fa-users" style={{marginRight: '8px'}}></i> Utilisateurs</button>
+                  <button onClick={() => handleGenerate('saes')} className="btn-secondary"><i className="fa-solid fa-book" style={{marginRight: '8px'}}></i> SAEs</button>
                 </div>
               </div>
 
-              {/* NOUVEAU : FORMULAIRE DE CRÉATION MANUELLE ADMIN */}
               <div className="card" style={{marginBottom: '2rem'}}>
-                <h2>Créer un compte manuellement</h2>
-                <p className="text-muted" style={{marginBottom:'1rem'}}>Permet de créer un compte Enseignant (ou Étudiant sur mesure).</p>
-                <form onSubmit={handleAdminSaveUser}>
-                   <div className="form-row">
-                      <input type="text" placeholder="Prénom" value={adminNewPrenom} onChange={e => setAdminNewPrenom(e.target.value)} required style={{flex: 1}}/>
-                      <input type="text" placeholder="Nom" value={adminNewNom} onChange={e => setAdminNewNom(e.target.value)} required style={{flex: 1}}/>
+                <h2>{isEditingUser ? <><i className="fa-solid fa-user-pen"></i> Modifier</> : <><i className="fa-solid fa-user-plus"></i> Créer</>} un compte</h2>
+                <form onSubmit={handleAdminSaveUser} style={{marginTop:'15px'}}>
+                   <div className="form-row" style={{display:'flex', gap:'10px', marginBottom:'10px'}}>
+                      <input type="text" placeholder="Prénom" value={adminNewPrenom} onChange={e => setAdminNewPrenom(e.target.value)} required />
+                      <input type="text" placeholder="Nom" value={adminNewNom} onChange={e => setAdminNewNom(e.target.value)} required />
                    </div>
-                   <div className="form-row">
-                      <input type="email" placeholder="Email de connexion" value={adminNewMail} onChange={e => setAdminNewMail(e.target.value)} required style={{flex: 1}}/>
-                      <input type="text" placeholder="Mot de passe provisoire" value={adminNewPwd} onChange={e => setAdminNewPwd(e.target.value)} style={{flex: 1}}/>
+                   <div className="form-row" style={{display:'flex', gap:'10px', marginBottom:'10px'}}>
+                      <input type="email" placeholder="Email" value={adminNewMail} onChange={e => setAdminNewMail(e.target.value)} required />
+                      <input type="text" placeholder="Mot de passe (optionnel)" value={adminNewPwd} onChange={e => setAdminNewPwd(e.target.value)} />
                    </div>
-                   
-                   <div className="form-group" style={{marginTop: '10px'}}>
-                      <label>Rôle du compte :</label>
+                   <div className="form-group">
+                      <label>Rôle :</label>
                       <select value={adminNewRole} onChange={e => setAdminNewRole(e.target.value)}>
-                         <option value="enseignant">Professeur / Enseignant</option>
+                         <option value="enseignant">Enseignant</option>
                          <option value="etudiant">Étudiant</option>
                       </select>
                    </div>
-
-                   {adminNewRole === 'enseignant' ? (
-                      <div className="form-group">
-                         <label>Classes gérées par ce professeur :</label>
-                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '10px', backgroundColor: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '8px'}}>
-                           {CLASSES_DISPOS.map(c => (
-                             <label key={c} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                               <input type="checkbox" checked={adminNewClasses.includes(c)} onChange={(e) => {
-                                   if (e.target.checked) setAdminNewClasses([...adminNewClasses, c]);
-                                   else setAdminNewClasses(adminNewClasses.filter(cls => cls !== c));
-                                 }} /> {c}
-                             </label>
-                           ))}
-                         </div>
-                      </div>
-                   ) : (
-                      <div className="form-group">
-                         <label>Classe de l'élève :</label>
-                         <select value={adminNewClasses[0] || CLASSES_DISPOS[0]} onChange={e => setAdminNewClasses([e.target.value])}>
-                           {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
-                         </select>
-                      </div>
-                   )}
-
-                   {/* LES BOUTONS DU FORMULAIRE DE L'ADMIN */}
                    <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
-                      <button type="submit" className="btn-secondary">{isEditingUser ? 'Enregistrer les modifications' : 'Créer le compte'}</button>
-                      {isEditingUser && (
-                         <button type="button" onClick={() => { setIsEditingUser(false); setAdminNewNom(''); setAdminNewPrenom(''); setAdminNewMail(''); setAdminNewPwd(''); }} style={{background: 'transparent', border: '1px solid #ccc', padding: '8px', borderRadius: '5px', cursor: 'pointer'}}>Annuler</button>
-                      )}
+                      <button type="submit" className="btn-primary">{isEditingUser ? 'Enregistrer' : 'Créer le compte'}</button>
+                      {isEditingUser && <button type="button" className="btn-secondary" onClick={() => setIsEditingUser(false)}>Annuler</button>}
                    </div>
                 </form>
               </div>
 
               <div className="card">
-                <h2>Base de données des Comptes</h2>
-                <div style={{overflowX: 'auto'}}>
+                <h2><i className="fa-solid fa-table-list" style={{marginRight: '10px'}}></i> Liste des utilisateurs</h2>
+                <div style={{overflowX: 'auto', marginTop:'15px'}}>
                   <table className="admin-table">
                     <thead>
                       <tr>
                         <th>Utilisateur</th>
-                        <th>Email</th>
                         <th>Rôle</th>
-                        <th>Classe</th>
-                        <th>Action</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {listeUtilisateurs.map(user => (
                         <tr key={user.id}>
-                          <td style={{fontWeight:'600'}}>{user.prenom} {user.nom}</td>
-                          <td className="text-muted">{user.mail}</td>
-                          <td><span className={`badge badge-${user.role === 'admin' ? 'warning' : user.role === 'enseignant' ? 'success' : 'primary'}`}>{user.role}</span></td>
-                          <td>{user.classe && user.classe.startsWith('[') ? JSON.parse(user.classe).join(', ') : (user.classe || '-')}</td>
-                          
-                          {/* L'AJOUT DES BOUTONS EDITER ET SE CONNECTER POUR L'ADMIN */}
                           <td>
-                            <button onClick={() => openAdminEditUser(user)} style={{marginRight: '5px', padding: '5px 10px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer'}}>✏️ Éditer</button>
-                            {user.role !== 'admin' && (
-                              <button onClick={() => handleImpersonate(user.id)} className="btn-small">🔗 Se connecter</button>
-                            )}
+                            <div style={{fontWeight:'600'}}>{user.prenom} {user.nom}</div>
+                            <div style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>{user.mail}</div>
+                          </td>
+                          <td><span className={`badge badge-${user.role === 'admin' ? 'warning' : 'primary'}`}>{user.role}</span></td>
+                          <td>
+                            <div style={{display:'flex', gap:'5px'}}>
+                              <button onClick={() => openAdminEditUser(user)} className="btn-primary" style={{padding:'5px 10px'}} title="Modifier">
+                                <i className="fa-solid fa-pen"></i>
+                              </button>
+                              {user.role !== 'admin' && (
+                                <button onClick={() => handleImpersonate(user.id)} className="btn-secondary" style={{padding:'5px 10px'}} title="Se connecter en tant que">
+                                  <i className="fa-solid fa-mask"></i>
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -910,6 +686,118 @@ function App() {
             </div>
           )}
 
+          {/* VUE : CREATE SAE */}
+          {vueActuelle === 'create-sae' && (
+            <div className="form-card-container">
+              <div className="card form-card" style={{maxWidth:'650px'}}>
+                <h2><i className="fa-solid fa-file-circle-plus" style={{marginRight: '10px'}}></i> Publier un nouveau sujet</h2>
+                <form onSubmit={handleCreateSae} style={{marginTop:'1.5rem'}}>
+                  <div className="form-group">
+                    <label>Nom de la SAE</label>
+                    <input type="text" value={nomSae} onChange={(e) => setNomSae(e.target.value)} required placeholder="Ex: SAE 301 - Développement Web" />
+                  </div>
+                  <div className="form-row" style={{display:'flex', gap:'15px'}}>
+                    <div className="form-group" style={{flex:1}}>
+                      <label><i className="fa-solid fa-calendar-check" style={{marginRight: '5px'}}></i> Date de rendu</label>
+                      <input type="datetime-local" value={dateRenduSae} onChange={(e) => setDateRenduSae(e.target.value)} required />
+                    </div>
+                    <div className="form-group" style={{flex:1}}>
+                      <label><i className="fa-solid fa-users-rectangle" style={{marginRight: '5px'}}></i> Classe cible</label>
+                      <select value={classeCible} onChange={(e) => setClasseCible(e.target.value)}>
+                        <option value="Toutes">Toutes mes classes</option>
+                        {classesDuProf.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Consignes et objectifs</label>
+                    <textarea value={descriptionSae} onChange={(e) => setDescriptionSae(e.target.value)} required placeholder="Détaillez ici les instructions..." style={{minHeight:'180px'}} />
+                  </div>
+                  <div className="form-group">
+                    <label><i className="fa-solid fa-paperclip" style={{marginRight: '5px'}}></i> Fichiers ressources (PDF, ZIP...)</label>
+                    <input type="file" multiple onChange={(e) => setFichiersSae(Array.from(e.target.files))} />
+                  </div>
+                  <div style={{display:'flex', gap:'12px', marginTop:'10px'}}>
+                    <button type="submit" className="btn-primary" style={{flex:2}}>Publier la SAE</button>
+                    <button type="button" onClick={() => setVueActuelle(role === 'admin' ? 'admin' : 'dashboard')} className="btn-secondary" style={{flex:1}}>Annuler</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* VUE : PROFILE */}
+          {vueActuelle === 'profile' && (
+            <div className="form-card-container">
+              <div className="card form-card" style={{maxWidth:'550px'}}>
+                <h2 style={{textAlign:'center'}}><i className="fa-solid fa-id-card" style={{marginRight: '12px'}}></i> Paramètres du compte</h2>
+                {profilMessage && <div className="alert alert-success" style={{marginTop:'1rem'}}>{profilMessage}</div>}
+                <form onSubmit={handleUpdateProfile} style={{marginTop:'1.5rem'}}>
+                  <div className="form-row" style={{display:'flex', gap:'10px', marginBottom:'1rem'}}>
+                    <div style={{flex:1}}>
+                      <label>Prénom</label>
+                      <input type="text" value={profilData.prenom} onChange={(e) => setProfilData({...profilData, prenom: e.target.value})} required/>
+                    </div>
+                    <div style={{flex:1}}>
+                      <label>Nom</label>
+                      <input type="text" value={profilData.nom} onChange={(e) => setProfilData({...profilData, nom: e.target.value})} required/>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Email professionnel</label>
+                    <input type="email" value={profilData.mail} onChange={(e) => setProfilData({...profilData, mail: e.target.value})} required />
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '2rem' }}>
+                    <button type="submit" className="btn-primary" style={{ flex: 2 }}>Mettre à jour</button>
+                    <button type="button" onClick={() => setVueActuelle(role === 'admin' ? 'admin' : 'dashboard')} className="btn-secondary" style={{ flex: 1 }}>Retour</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* VUE : GESTION CLASSE */}
+          {vueActuelle === 'gestion-classe' && (
+            <div className="admin-layout">
+              <div style={{display:'flex', gap:'25px', flexWrap:'wrap'}}>
+                 <div className="card" style={{flex:1, minWidth:'300px'}}>
+                    <h3><i className="fa-solid fa-user-graduate" style={{marginRight: '10px'}}></i> Liste des élèves ({classeGeree})</h3>
+                    <div style={{marginTop:'1rem'}}>
+                      {etudiants.filter(e => e.classe === classeGeree).map(e => (
+                        <div key={e.id} style={{padding:'12px', borderBottom:'1px solid var(--border)', display:'flex', justifyContent:'space-between'}}>
+                          <span>{e.nom} {e.prenom}</span>
+                          <span style={{fontSize:'0.8rem', color:'var(--text-muted)'}}>{e.mail}</span>
+                        </div>
+                      ))}
+                      {etudiants.filter(e => e.classe === classeGeree).length === 0 && <p className="text-muted">Aucun élève trouvé.</p>}
+                    </div>
+                 </div>
+                 <div className="card" style={{flex:1, minWidth:'300px'}}>
+                    <h3><i className="fa-solid fa-user-plus" style={{marginRight: '10px'}}></i> Ajouter des élèves</h3>
+                    <p className="text-muted" style={{marginTop:'10px'}}>Ici s'affichera la liste des étudiants sans classe assignée.</p>
+                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* VUE : CREATE ANNONCE */}
+          {vueActuelle === 'create-annonce' && (
+            <div className="form-card-container">
+              <div className="card form-card" style={{maxWidth:'600px'}}>
+                <h2><i className="fa-solid fa-bullhorn" style={{marginRight: '12px'}}></i> Nouvelle annonce</h2>
+                <form onSubmit={handleCreateAnnonce} style={{marginTop:'1.5rem'}}>
+                  <div className="form-group">
+                    <label>Message public</label>
+                    <textarea value={messageAnnonce} onChange={e => setMessageAnnonce(e.target.value)} placeholder="Écrivez votre message ici pour informer les étudiants..." required style={{minHeight:'180px'}} />
+                  </div>
+                  <button type="submit" className="btn-primary" style={{width:'100%', marginTop:'10px'}}>
+                    <i className="fa-solid fa-paper-plane" style={{marginRight: '10px'}}></i> Publier l'annonce
+                  </button>
+                  <button type="button" onClick={() => setVueActuelle(role === 'admin' ? 'admin' : 'dashboard')} className="btn-secondary" style={{width:'100%', marginTop:'10px'}}>Annuler</button>
+                </form>
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
