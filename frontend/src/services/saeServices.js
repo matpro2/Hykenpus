@@ -92,8 +92,6 @@ export const saeService = {
     if (!response.ok) throw new Error(data.message);
     return data;
   },
-  
-  // --- NOUVEAU : ANNONCES ---
   getAnnonces: async (token) => {
     const response = await fetch(`${API_BASE_URL}/annonces`, { headers: { 'Authorization': `Bearer ${token}` } });
     if (!response.ok) throw new Error("Erreur annonces");
@@ -107,15 +105,13 @@ export const saeService = {
     if (!response.ok) throw new Error(data.message);
     return data;
   },
-
   getEtudiants: async (token) => {
     const response = await fetch(`${API_BASE_URL}/enseignant/etudiants`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    if (!response.ok) throw new Error("Erreur lors de la récupération des étudiants");
+    if (!response.ok) throw new Error("Erreur récupération étudiants");
     return await response.json();
   },
-
   adminCreateUser: async (userData, token) => {
     const response = await fetch(`${API_BASE_URL}/admin/create-user`, {
       method: 'POST',
@@ -123,17 +119,16 @@ export const saeService = {
       body: JSON.stringify(userData)
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.message || "Erreur lors de la création");
+    if (!response.ok) throw new Error(data.message || "Erreur création");
     return data;
   },
-  
   updateEtudiantClasse: async (etudiantId, nouvelleClasse, token) => {
     const response = await fetch(`${API_BASE_URL}/enseignant/etudiants/${etudiantId}/classe`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ nouvelleClasse })
     });
-    if (!response.ok) throw new Error("Échec de l'assignation");
+    if (!response.ok) throw new Error("Échec assignation");
     return await response.json();
   }
-}
+};

@@ -91,24 +91,35 @@ async function initDB() {
             ['Système', 'Admin', 'Admin', hashedAdminPw, 'admin', '["Toutes"]']
         );
     }
-    console.log("✅ Base de données locale prête (Avec système d'Annonces) !");
+    console.log("✅ Base de données locale prête !");
 }
-initDB();
 
-app.get('/api/public/sae', async (req, res) => {
-    try {
-        const rows = await db.all(`
-            SELECT SAE.*, Comptes.nom AS auteur_nom, Comptes.prenom AS auteur_prenom 
-            FROM SAE JOIN Comptes ON SAE.auteur_id = Comptes.id
-        `);
-        res.json(rows);
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur" });
-    }
+// --- INITIALISATION SECURISEE ---
+// Le serveur ne démarrera pas tant que la BDD n'est pas chargée.
+initDB().then(() => {
+    app.listen(PORT, () => {
+        console.log(`🚀 Serveur démarré sur le port ${PORT}`);
+    });
+}).catch(err => {
+    console.error("❌ Erreur critique lors de l'initialisation de la BDD :", err);
 });
 
+// --- MIDDLEWARE AUTH ---
+const verifierToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    if (!token) return res.status(401).json({ message: "Accès refusé" });
+
+    jwt.verify(token, SECRET_KEY, (err, user) => {
+        if (err) return res.status(403).json({ message: "Token invalide" });
+        req.user = user;
+        next(); 
+    });
+};
+
+// --- ROUTES ---
 app.post('/api/register', async (req, res) => {
-    // On ignore le "role" que pourrait envoyer le formulaire, on force 'etudiant'
+    // INSCRIPTION PUBLIQUE : FORCÉE EN ÉTUDIANT
     const { nom, prenom, mail, password, classe } = req.body;
     try {
         const existingUsers = await db.all('SELECT * FROM Comptes WHERE mail = ?', [mail]);
@@ -123,6 +134,7 @@ app.post('/api/register', async (req, res) => {
         );
         res.status(201).json({ message: "Compte créé avec succès !" });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: "Erreur lors de l'inscription" });
     }
 });
@@ -140,21 +152,17 @@ app.post('/api/login', async (req, res) => {
         const token = jwt.sign({ id: user.id, mail: user.mail, role: user.role, classe: user.classe }, SECRET_KEY, { expiresIn: '2h' });
         res.json({ token, role: user.role, nom: user.nom, prenom: user.prenom, classe: user.classe });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ message: "Erreur lors de la connexion" });
     }
 });
 
-const verifierToken = (req, res, next) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
-    if (!token) return res.status(401).json({ message: "Accès refusé" });
-
-    jwt.verify(token, SECRET_KEY, (err, user) => {
-        if (err) return res.status(403).json({ message: "Token invalide" });
-        req.user = user;
-        next(); 
-    });
-};
+app.get('/api/public/sae', async (req, res) => {
+    try {
+        const rows = await db.all(`SELECT SAE.*, Comptes.nom AS auteur_nom, Comptes.prenom AS auteur_prenom FROM SAE JOIN Comptes ON SAE.auteur_id = Comptes.id`);
+        res.json(rows);
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur" }); }
+});
 
 app.get('/api/sae', verifierToken, async (req, res) => {
     try {
@@ -180,36 +188,26 @@ app.get('/api/sae', verifierToken, async (req, res) => {
             `, [req.user.id, userDb.classe]);
             return res.json(rows);
         }
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur" });
-    }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur" }); }
 });
 
 app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, res) => {
     if (req.user.role !== 'enseignant' && req.user.role !== 'admin') return res.status(403).json({ message: "Non autorisé." });
-
     const { nom, description, date_rendu, classe_cible } = req.body;
     const auteur_id = req.user.id; 
     const date_creation = new Date().toISOString().split('T')[0]; 
     const fichiersNoms = req.files ? req.files.map(f => f.filename) : [];
     const documentsStr = JSON.stringify(fichiersNoms); 
-
     try {
-        await db.run(
-            'INSERT INTO SAE (nom, auteur_id, description, date_creation, documents, date_rendu, classe_cible) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [nom, auteur_id, description, date_creation, documentsStr, date_rendu, classe_cible || 'Toutes']
-        );
+        await db.run('INSERT INTO SAE (nom, auteur_id, description, date_creation, documents, date_rendu, classe_cible) VALUES (?, ?, ?, ?, ?, ?, ?)', [nom, auteur_id, description, date_creation, documentsStr, date_rendu, classe_cible || 'Toutes']);
         res.status(201).json({ message: "SAE créée avec succès !" });
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur" });
-    }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur" }); }
 });
 
 app.put('/api/sae/:id', verifierToken, upload.array('fichiers', 10), async (req, res) => {
     if (req.user.role !== 'enseignant' && req.user.role !== 'admin') return res.status(403).json({ message: "Non autorisé." });
     const saeId = req.params.id;
     const { nom, description, date_rendu, classe_cible } = req.body;
-
     try {
         const sae = await db.get('SELECT * FROM SAE WHERE id = ?', [saeId]);
         if (!sae) return res.status(404).json({ message: "SAE introuvable" });
@@ -221,30 +219,21 @@ app.put('/api/sae/:id', verifierToken, upload.array('fichiers', 10), async (req,
             const nouveauxDocs = req.files.map(f => f.filename);
             documentsStr = JSON.stringify([...anciensDocs, ...nouveauxDocs]);
         }
-
-        await db.run(
-            'UPDATE SAE SET nom = ?, description = ?, date_rendu = ?, classe_cible = ?, documents = ? WHERE id = ?',
-            [nom, description, date_rendu, classe_cible || 'Toutes', documentsStr, saeId]
-        );
+        await db.run('UPDATE SAE SET nom = ?, description = ?, date_rendu = ?, classe_cible = ?, documents = ? WHERE id = ?', [nom, description, date_rendu, classe_cible || 'Toutes', documentsStr, saeId]);
         res.json({ message: "SAE modifiée avec succès !" });
-    } catch (error) {
-        res.status(500).json({ message: "Erreur lors de la modification" });
-    }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur lors de la modification" }); }
 });
 
 app.get('/api/sae/:id', verifierToken, async (req, res) => {
     try {
         const sae = await db.get('SELECT * FROM SAE WHERE id = ?', [req.params.id]);
         if (!sae) return res.status(404).json({ message: "SAE introuvable" });
-
         let rendu = null;
         if (req.user.role === 'etudiant') {
             rendu = await db.get('SELECT * FROM Rendus WHERE sae_id = ? AND etudiant_id = ?', [req.params.id, req.user.id]);
         }
         res.json({ sae, rendu });
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur" });
-    }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur" }); }
 });
 
 app.post('/api/sae/:id/rendu', verifierToken, upload.array('fichiers', 5), async (req, res) => {
@@ -254,7 +243,6 @@ app.post('/api/sae/:id/rendu', verifierToken, upload.array('fichiers', 5), async
     const date_soumission = new Date().toISOString(); 
     const fichiersNoms = req.files ? req.files.map(f => f.filename) : [];
     const documentsStr = JSON.stringify(fichiersNoms);
-
     try {
         const existing = await db.get('SELECT id FROM Rendus WHERE sae_id = ? AND etudiant_id = ?', [sae_id, etudiant_id]);
         if (existing) {
@@ -263,32 +251,21 @@ app.post('/api/sae/:id/rendu', verifierToken, upload.array('fichiers', 5), async
             await db.run('INSERT INTO Rendus (sae_id, etudiant_id, date_soumission, documents) VALUES (?, ?, ?, ?)', [sae_id, etudiant_id, date_soumission, documentsStr]);
         }
         res.status(201).json({ message: "Travail rendu avec succès !" });
-    } catch (error) {
-        res.status(500).json({ message: "Erreur lors du rendu" });
-    }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur lors du rendu" }); }
 });
 
-// NOUVEAU : Création manuelle d'un compte (ex: Enseignant) par l'Admin
+// ADMIN ROUTES
 app.post('/api/admin/create-user', verifierToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ message: "Accès refusé." });
-    
     const { nom, prenom, mail, password, role, classes } = req.body;
     try {
         const existing = await db.get('SELECT id FROM Comptes WHERE mail = ?', [mail]);
         if (existing) return res.status(400).json({ message: "Email déjà utilisé." });
-
         const hashedPassword = await bcrypt.hash(password, 10);
-        // Si c'est un enseignant, on sauvegarde son tableau de classes en JSON
         const classeUser = role === 'enseignant' ? JSON.stringify(classes || []) : (classes || 'MMI-A1');
-
-        await db.run(
-            'INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role, classe) VALUES (?, ?, ?, ?, ?, ?)',
-            [nom, prenom, mail, hashedPassword, role, classeUser]
-        );
-        res.status(201).json({ message: "Compte créé avec succès par l'Admin !" });
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur" });
-    }
+        await db.run('INSERT INTO Comptes (nom, prenom, mail, mot_de_passe, role, classe) VALUES (?, ?, ?, ?, ?, ?)', [nom, prenom, mail, hashedPassword, role, classeUser]);
+        res.status(201).json({ message: "Compte créé avec succès !" });
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur" }); }
 });
 
 app.post('/api/admin/generate', verifierToken, async (req, res) => {
@@ -296,19 +273,16 @@ app.post('/api/admin/generate', verifierToken, async (req, res) => {
     const { type, count } = req.body;
     const limit = parseInt(count) || 5;
     const classesList = ['MMI-A1', 'MMI-A2', 'MMI-B1', 'MMI-B2', 'MMI-C1', 'MMI-C2'];
-
     try {
         if (type === 'users') {
             const prenoms = ['Lukas', 'Emma', 'Thomas', 'Chloe', 'Hugo', 'Lea', 'Maxime', 'Manon', 'Antoine'];
             const noms = ['Martin', 'Bernard', 'Dubois', 'Thomas', 'Robert', 'Richard', 'Petit', 'Durand'];
-            
             for(let i=0; i<limit; i++) {
                 const p = prenoms[Math.floor(Math.random() * prenoms.length)];
                 const n = noms[Math.floor(Math.random() * noms.length)];
                 const role = Math.random() > 0.8 ? 'enseignant' : 'etudiant'; 
                 const mail = `${p.toLowerCase()}.${n.toLowerCase()}${Math.floor(Math.random()*1000)}@test.fr`;
                 const pwd = await bcrypt.hash('password123', 10);
-                
                 let classe;
                 if (role === 'enseignant') {
                     const numClasses = Math.floor(Math.random() * 3) + 1;
@@ -342,7 +316,7 @@ app.post('/api/admin/generate', verifierToken, async (req, res) => {
             }
             res.json({ message: `✅ ${limit} SAEs générées !` });
         }
-    } catch (error) { res.status(500).json({ message: "Erreur lors de la génération." }); }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur lors de la génération." }); }
 });
 
 app.get('/api/admin/users', verifierToken, async (req, res) => {
@@ -350,7 +324,7 @@ app.get('/api/admin/users', verifierToken, async (req, res) => {
     try {
         const users = await db.all('SELECT id, nom, prenom, mail, role, classe FROM Comptes ORDER BY id DESC');
         res.json(users);
-    } catch (error) { res.status(500).json({ message: "Erreur serveur." }); }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur." }); }
 });
 
 app.post('/api/admin/impersonate', verifierToken, async (req, res) => {
@@ -361,7 +335,7 @@ app.post('/api/admin/impersonate', verifierToken, async (req, res) => {
         if (!user) return res.status(404).json({ message: "Introuvable." });
         const token = jwt.sign({ id: user.id, mail: user.mail, role: user.role, classe: user.classe }, SECRET_KEY, { expiresIn: '2h' });
         res.json({ token, role: user.role, nom: user.nom, prenom: user.prenom, classe: user.classe });
-    } catch (error) { res.status(500).json({ message: "Erreur serveur." }); }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur." }); }
 });
 
 app.get('/api/users/me', verifierToken, async (req, res) => {
@@ -369,7 +343,7 @@ app.get('/api/users/me', verifierToken, async (req, res) => {
         const user = await db.get('SELECT nom, prenom, mail, role, classe FROM Comptes WHERE id = ?', [req.user.id]);
         if (!user) return res.status(404).json({ message: "Compte introuvable" });
         res.json(user);
-    } catch (error) { res.status(500).json({ message: "Erreur serveur" }); }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur" }); }
 });
 
 app.put('/api/users/me', verifierToken, async (req, res) => {
@@ -380,7 +354,7 @@ app.put('/api/users/me', verifierToken, async (req, res) => {
         await db.run('UPDATE Comptes SET nom = ?, prenom = ?, mail = ?, classe = ? WHERE id = ?', [nom, prenom, mail, classe, req.user.id]);
         const token = jwt.sign({ id: req.user.id, mail: mail, role: req.user.role, classe: classe }, SECRET_KEY, { expiresIn: '2h' });
         res.json({ token, nom, prenom, classe, message: "Profil mis à jour !" });
-    } catch (error) { res.status(500).json({ message: "Erreur lors de la mise à jour." }); }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur lors de la mise à jour." }); }
 });
 
 app.get('/api/enseignant/etudiants', verifierToken, async (req, res) => {
@@ -388,7 +362,7 @@ app.get('/api/enseignant/etudiants', verifierToken, async (req, res) => {
     try {
         const etudiants = await db.all("SELECT id, nom, prenom, mail, classe FROM Comptes WHERE role = 'etudiant' ORDER BY nom ASC");
         res.json(etudiants);
-    } catch (error) { res.status(500).json({ message: "Erreur serveur" }); }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur" }); }
 });
 
 app.put('/api/enseignant/etudiants/:id/classe', verifierToken, async (req, res) => {
@@ -397,30 +371,23 @@ app.put('/api/enseignant/etudiants/:id/classe', verifierToken, async (req, res) 
     try {
         await db.run("UPDATE Comptes SET classe = ? WHERE id = ? AND role = 'etudiant'", [nouvelleClasse, req.params.id]);
         res.json({ message: "Classe de l'élève mise à jour" });
-    } catch (error) { res.status(500).json({ message: "Erreur" }); }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur" }); }
 });
 
-// --- ROUTES CORRIGÉES : ANNONCES ---
 app.get('/api/annonces', verifierToken, async (req, res) => {
     try {
         if (req.user.role === 'admin') {
-            // NOUVEAU : On précise Annonces.id pour le ORDER BY
             const rows = await db.all(`SELECT Annonces.*, Comptes.nom, Comptes.prenom, SAE.nom AS sae_nom FROM Annonces JOIN Comptes ON Annonces.auteur_id = Comptes.id LEFT JOIN SAE ON Annonces.sae_id = SAE.id ORDER BY Annonces.id DESC`);
             return res.json(rows);
         } else if (req.user.role === 'enseignant') {
-            // NOUVEAU : On précise Annonces.auteur_id et Annonces.id
             const rows = await db.all(`SELECT Annonces.*, Comptes.nom, Comptes.prenom, SAE.nom AS sae_nom FROM Annonces JOIN Comptes ON Annonces.auteur_id = Comptes.id LEFT JOIN SAE ON Annonces.sae_id = SAE.id WHERE Annonces.auteur_id = ? ORDER BY Annonces.id DESC`, [req.user.id]);
             return res.json(rows);
         } else {
-            // NOUVEAU : On précise Annonces.id
             const userDb = await db.get('SELECT classe FROM Comptes WHERE id = ?', [req.user.id]);
             const rows = await db.all(`SELECT Annonces.*, Comptes.nom, Comptes.prenom, SAE.nom AS sae_nom FROM Annonces JOIN Comptes ON Annonces.auteur_id = Comptes.id LEFT JOIN SAE ON Annonces.sae_id = SAE.id WHERE Annonces.classe_cible = ? OR Annonces.classe_cible = 'Toutes' ORDER BY Annonces.id DESC`, [userDb.classe]);
             return res.json(rows);
         }
-    } catch (error) { 
-        console.error(error); // Permet de voir l'erreur exacte dans le terminal
-        res.status(500).json({ message: "Erreur serveur" }); 
-    }
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur" }); }
 });
 
 app.post('/api/annonces', verifierToken, async (req, res) => {
@@ -430,9 +397,5 @@ app.post('/api/annonces', verifierToken, async (req, res) => {
     try {
         await db.run('INSERT INTO Annonces (auteur_id, message, classe_cible, sae_id, date_creation) VALUES (?, ?, ?, ?, ?)', [req.user.id, message, classe_cible || 'Toutes', sae_id || null, date_creation]);
         res.status(201).json({ message: "Annonce publiée !" });
-    } catch (error) { res.status(500).json({ message: "Erreur serveur" }); }
-});
-
-app.listen(PORT, () => {
-    console.log(`Serveur démarré sur le port ${PORT}`);
+    } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur" }); }
 });

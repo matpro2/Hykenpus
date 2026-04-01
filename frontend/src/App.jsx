@@ -18,9 +18,9 @@ function App() {
   const [password, setPassword] = useState('');
   const [nom, setNom] = useState('');
   const [prenom, setPrenom] = useState('');
-  const [roleInscription, setRoleInscription] = useState('etudiant');
+  
+  // NOTE: Le rôle est forcé à 'etudiant' pour l'inscription publique
   const [classeInscription, setClasseInscription] = useState(CLASSES_DISPOS[0]);
-  const [classesEnseignant, setClassesEnseignant] = useState([]); 
 
   const [profilData, setProfilData] = useState({ nom: '', prenom: '', mail: '', classeEtudiant: '', classesEns: [] });
   const [profilMessage, setProfilMessage] = useState(null);
@@ -35,17 +35,15 @@ function App() {
   const [selectedRendu, setSelectedRendu] = useState(null);
   const [fichiersRendu, setFichiersRendu] = useState([]);
 
-  // NOUVEAU : États pour les Annonces
   const [annonces, setAnnonces] = useState([]);
   const [messageAnnonce, setMessageAnnonce] = useState('');
   const [classeCibleAnnonce, setClasseCibleAnnonce] = useState('Toutes');
   const [saeLieeAnnonce, setSaeLieeAnnonce] = useState('');
   
-  // NOUVEAU : États pour la gestion des classes
   const [etudiants, setEtudiants] = useState([]);
   const [classeGeree, setClasseGeree] = useState('');
 
-  // NOUVEAU : États pour la création manuelle d'un compte (Panel Admin)
+  // FORMULAIRE ADMIN MANUEL
   const [adminNewNom, setAdminNewNom] = useState('');
   const [adminNewPrenom, setAdminNewPrenom] = useState('');
   const [adminNewMail, setAdminNewMail] = useState('');
@@ -67,22 +65,21 @@ function App() {
     if (isDarkMode) { document.body.classList.add('dark-mode'); localStorage.setItem('theme', 'dark'); } 
     else { document.body.classList.remove('dark-mode'); localStorage.setItem('theme', 'light'); }
   }, [isDarkMode]);
+  
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
   useEffect(() => {
     setLoading(true); setErreur(null);
-if (token) {
+    if (token) {
       if (['public', 'login', 'register'].includes(vueActuelle)) setVueActuelle('dashboard');
       saeService.getListeSae(token).then(setSaes).catch(handleLogout).finally(() => setLoading(false));
-      
-      // NOUVEAU : On charge les annonces !
       saeService.getAnnonces(token).then(setAnnonces).catch(console.error);
 
       if (vueActuelle === 'admin' && role === 'admin') saeService.getAllUsers(token).then(setListeUtilisateurs).catch(console.error);
       if (vueActuelle === 'gestion-classe' && role === 'enseignant') saeService.getEtudiants(token).then(setEtudiants).catch(console.error);
     
     } else {
-      setVueActuelle(prev => ['dashboard', 'create-sae', 'admin', 'profile', 'sae-details', 'edit-sae', 'gestion-classe'].includes(prev) ? 'public' : prev);
+      setVueActuelle(prev => ['dashboard', 'create-sae', 'admin', 'profile', 'sae-details', 'edit-sae', 'gestion-classe', 'create-annonce'].includes(prev) ? 'public' : prev);
       saeService.getPublicListeSae().then(setSaes).catch(console.error).finally(() => setLoading(false));
     }
   }, [token, vueActuelle, role, classeGeree]);
@@ -102,10 +99,9 @@ if (token) {
 
   const handleRegister = async (e) => {
     e.preventDefault(); setErreur(null); setSucces(null);
-    const classeFormattee = roleInscription === 'enseignant' ? JSON.stringify(classesEnseignant) : classeInscription;
-    if (roleInscription === 'enseignant' && classesEnseignant.length === 0) return setErreur("Sélectionnez au moins une classe.");
     try {
-      await saeService.register({ nom, prenom, mail: identifiant, password, role: roleInscription, classe: classeFormattee });
+      // Inscription publique = étudiant par défaut
+      await saeService.register({ nom, prenom, mail: identifiant, password, classe: classeInscription });
       const data = await saeService.login(identifiant, password);
       saveAuthData(data); setNom(''); setPrenom(''); setPassword(''); setVueActuelle('dashboard');
     } catch (err) { setErreur(err.message); }
@@ -168,6 +164,21 @@ if (token) {
     } catch(err) { setErreur(err.message); }
   };
 
+  const handleCreateSae = async (e) => {
+    e.preventDefault(); setErreur(null);
+    try {
+      const formData = new FormData();
+      formData.append('nom', nomSae); formData.append('description', descriptionSae); formData.append('date_rendu', dateRenduSae); formData.append('classe_cible', classeCible);
+      fichiersSae.forEach(f => formData.append('fichiers', f));
+
+      await saeService.createSae(formData, token);
+      const data = await saeService.getListeSae(token);
+      setSaes(data);
+      setNomSae(''); setDescriptionSae(''); setDateRenduSae(''); setClasseCible('Toutes'); setFichiersSae([]); setVueActuelle('dashboard');
+      setSucces("SAE publiée avec succès !");
+    } catch (err) { setErreur(err.message); }
+  };
+
   const handleSubmitRendu = async (e) => {
     e.preventDefault(); setErreur(null); setSucces(null);
     if (fichiersRendu.length === 0) return setErreur("Joignez au moins un fichier.");
@@ -183,19 +194,17 @@ if (token) {
     } catch(err) { setErreur(err.message); }
   };
 
-  // NOUVEAU : Fonction pour forcer la classe d'un étudiant depuis le panel prof
   const handleAssignerClasse = async (etudiantId, nouvelleClasse) => {
       setErreur(null); setSucces(null);
       try {
           await saeService.updateEtudiantClasse(etudiantId, nouvelleClasse, token);
           setSucces("L'élève a bien été assigné à la classe !");
-          // On rafraîchit la liste
           const data = await saeService.getEtudiants(token);
           setEtudiants(data);
       } catch(err) { setErreur(err.message); }
   };
 
-  // NOUVEAU : Soumettre le formulaire de création manuelle (Admin)
+  // ADMIN CREATE USER
   const handleAdminCreateUser = async (e) => {
     e.preventDefault(); setErreur(null); setAdminMessage(null);
     if (adminNewRole === 'enseignant' && adminNewClasses.length === 0) return setErreur("Sélectionnez au moins une classe pour ce professeur.");
@@ -297,7 +306,7 @@ if (token) {
              </div>
           )}
 
-          {/* NOUVEAU : LE MENU DE GESTION DE CLASSES POUR LE PROF */}
+          {/* GESTION DE CLASSES POUR LE PROF */}
           {token && role === 'enseignant' && classesDuProf.length > 0 && (
              <>
                <span className="nav-label" style={{marginTop: '20px'}}>Mes Classes</span>
@@ -351,6 +360,7 @@ if (token) {
               vueActuelle === 'edit-sae' ? 'Modification SAE' :
               vueActuelle === 'profile' ? 'Mon Compte' :
               vueActuelle === 'gestion-classe' ? `Gestion classe ${classeGeree}` :
+              vueActuelle === 'create-annonce' ? 'Envoyer une annonce' :
               'Situations d\'Apprentissage'
             }</h1>
             {token && <div className="badge badge-primary">Session 2025-2026</div>}
@@ -379,7 +389,6 @@ if (token) {
               </select>
             )}
 
-            {/* BOUTON MON COMPTE */}
             {token && (
               <button onClick={openProfilePage} className="btn-secondary" style={{ padding: '8px 15px', margin: 0 }}>👤 Mon Compte</button>
             )}
@@ -390,14 +399,11 @@ if (token) {
           {erreur && <div className="alert alert-danger">{erreur}</div>}
           {succes && <div className="alert alert-success">{succes}</div>}
 
-          {/* VUE : GESTION DES CLASSES (NOUVEAU) */}
+          {/* VUE : GESTION DES CLASSES */}
           {vueActuelle === 'gestion-classe' && role === 'enseignant' && (
              <div style={{display: 'flex', gap: '20px', alignItems: 'flex-start'}}>
-                
-                {/* BLOC 1: ÉLÈVES ACTUELS DANS CETTE CLASSE */}
                 <div className="card" style={{flex: 1}}>
                    <h2>Élèves de {classeGeree}</h2>
-                   <p style={{color: 'var(--text-muted)'}}>Liste des élèves actuellement assignés à cette classe.</p>
                    <ul style={{listStyle: 'none', padding: 0, marginTop: '15px'}}>
                       {etudiants.filter(e => e.classe === classeGeree).map(e => (
                           <li key={e.id} style={{padding: '10px', borderBottom: '1px solid var(--border-color)'}}>
@@ -410,11 +416,8 @@ if (token) {
                       )}
                    </ul>
                 </div>
-
-                {/* BLOC 2: ÉLÈVES D'AUTRES CLASSES À AJOUTER */}
                 <div className="card" style={{flex: 1}}>
                    <h2>Ajouter un élève</h2>
-                   <p style={{color: 'var(--text-muted)'}}>Sélectionnez des élèves du site pour les intégrer à {classeGeree}.</p>
                    <ul style={{listStyle: 'none', padding: 0, marginTop: '15px', maxHeight: '500px', overflowY: 'auto'}}>
                       {etudiants.filter(e => e.classe !== classeGeree).map(e => (
                           <li key={e.id} style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px', borderBottom: '1px solid var(--border-color)'}}>
@@ -427,61 +430,10 @@ if (token) {
                       ))}
                    </ul>
                 </div>
-
              </div>
           )}
 
-          {/* VUE : DASHBOARD / PUBLIC */}
-{/* VUE : DASHBOARD / PUBLIC */}
-          {(vueActuelle === 'dashboard' || vueActuelle === 'public') && (
-
-            <div className="sae-grid">
-              {loading ? <p>Chargement des ressources...</p> : 
-               getSaesTriees(saes).length > 0 ? getSaesTriees(saes).map(sae => {
-                 const statut = determinerStatut(sae);
-                 
-                 // NOUVEAU : Calcul du pourcentage de rendus pour le prof
-                 let pourcentage = 0;
-                 if (role === 'enseignant' && sae.nb_etudiants_cibles > 0) {
-                     pourcentage = Math.round((sae.nb_rendus / sae.nb_etudiants_cibles) * 100);
-                 }
-
-                 return (
-                  <div key={sae.id} className="card" style={{ cursor: token ? 'pointer' : 'default' }} onClick={() => token && openSaeDetails(sae.id)}>
-                    <div className="card-header">
-                      <span className="badge badge-primary">{sae.classe_cible}</span>
-                      {role === 'etudiant' && (
-                          <span className={`badge badge-${statut.couleur}`}>{statut.texte}</span>
-                      )}
-                    </div>
-                    <h3 className="card-title">{sae.nom}</h3>
-                    <p className="card-desc" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{sae.description}</p>
-                    <div className="card-meta">
-                      {sae.date_rendu && <span>📅 À rendre : {formatDateTime(sae.date_rendu)}</span>}
-                    </div>
-                    
-                    {/* NOUVEAU : Affichage de la jauge de progression pour l'enseignant */}
-                    {role === 'enseignant' && (
-                       <div style={{ marginTop: '15px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
-                             <span>Progression des rendus</span>
-                             <span>{sae.nb_rendus} / {sae.nb_etudiants_cibles} ({pourcentage}%)</span>
-                          </div>
-                          <div style={{ width: '100%', backgroundColor: '#e2e8f0', borderRadius: '4px', height: '8px', overflow: 'hidden' }}>
-                             <div style={{ width: `${pourcentage}%`, backgroundColor: pourcentage === 100 ? 'var(--success)' : 'var(--primary)', height: '100%', transition: 'width 0.3s' }}></div>
-                          </div>
-                       </div>
-                    )}
-
-                    {token && role === 'etudiant' && <button className="btn-secondary" style={{width:'100%', marginTop:'1rem'}}>Voir & Rendre le travail</button>}
-                    {token && role !== 'etudiant' && <button className="btn-secondary" style={{width:'100%', marginTop:'1rem'}}>Ouvrir la SAE</button>}
-                  </div>
-                 );
-              }) : <p className="text-muted">Aucune SAE ne correspond à vos filtres.</p>}
-            </div>
-          )}
-
-          {/* NOUVEAU : AFFICHAGE DES ANNONCES */}
+          {/* AFFICHAGE DES ANNONCES */}
           {token && (vueActuelle === 'dashboard') && annonces.length > 0 && (
             <div style={{ marginBottom: '2.5rem' }}>
                <h2 style={{ borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>📢 Annonces</h2>
@@ -503,8 +455,51 @@ if (token) {
                </div>
             </div>
           )}
+
+          {/* VUE : DASHBOARD / PUBLIC */}
+          {(vueActuelle === 'dashboard' || vueActuelle === 'public') && (
+            <div className="sae-grid">
+              {loading ? <p>Chargement des ressources...</p> : 
+               getSaesTriees(saes).length > 0 ? getSaesTriees(saes).map(sae => {
+                 const statut = determinerStatut(sae);
+                 let pourcentage = 0;
+                 if (role === 'enseignant' && sae.nb_etudiants_cibles > 0) {
+                     pourcentage = Math.round((sae.nb_rendus / sae.nb_etudiants_cibles) * 100);
+                 }
+                 return (
+                  <div key={sae.id} className="card" style={{ cursor: token ? 'pointer' : 'default' }} onClick={() => token && openSaeDetails(sae.id)}>
+                    <div className="card-header">
+                      <span className="badge badge-primary">{sae.classe_cible}</span>
+                      {role === 'etudiant' && (
+                          <span className={`badge badge-${statut.couleur}`}>{statut.texte}</span>
+                      )}
+                    </div>
+                    <h3 className="card-title">{sae.nom}</h3>
+                    <p className="card-desc" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{sae.description}</p>
+                    <div className="card-meta">
+                      {sae.date_rendu && <span>📅 À rendre : {formatDateTime(sae.date_rendu)}</span>}
+                    </div>
+                    {role === 'enseignant' && (
+                       <div style={{ marginTop: '15px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
+                             <span>Progression des rendus</span>
+                             <span>{sae.nb_rendus} / {sae.nb_etudiants_cibles} ({pourcentage}%)</span>
+                          </div>
+                          <div style={{ width: '100%', backgroundColor: '#e2e8f0', borderRadius: '4px', height: '8px', overflow: 'hidden' }}>
+                             <div style={{ width: `${pourcentage}%`, backgroundColor: pourcentage === 100 ? 'var(--success)' : 'var(--primary)', height: '100%', transition: 'width 0.3s' }}></div>
+                          </div>
+                       </div>
+                    )}
+                    {token && role === 'etudiant' && <button className="btn-secondary" style={{width:'100%', marginTop:'1rem'}}>Voir & Rendre le travail</button>}
+                    {token && role !== 'etudiant' && <button className="btn-secondary" style={{width:'100%', marginTop:'1rem'}}>Ouvrir la SAE</button>}
+                  </div>
+                 );
+              }) : <p className="text-muted">Aucune SAE ne correspond à vos filtres.</p>}
+            </div>
+          )}
+
+          {/* VUE : DÉTAILS DE LA SAE */}
           {vueActuelle === 'sae-details' && selectedSae && (
-            
             <div className="admin-layout">
               <div className="card" style={{marginBottom: '2rem'}}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
@@ -553,7 +548,7 @@ if (token) {
                             ))}
                          </div>
                          <hr style={{borderColor: 'var(--border-color)', margin: '1rem 0'}}/>
-                         <p style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Vous pouvez écraser votre rendu en déposant de nouveaux fichiers.</p>
+                         <p style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Vous pouvez écraser votre rendu en déposant de nouveaux fichiers ci-dessous.</p>
                        </div>
                     ) : (
                        <p style={{color: 'var(--text-muted)', marginBottom: '1rem'}}>
@@ -570,14 +565,14 @@ if (token) {
             </div>
           )}
           
-          {/* VUE : LOGIN / REGISTER / CREATE SAE / EDIT SAE / ADMIN / PROFILE */}
+          {/* VUE : LOGIN */}
           {vueActuelle === 'login' && (
             <div className="form-card-container">
               <div className="card form-card">
                 <h2>Connexion</h2>
                 <form onSubmit={handleLogin}>
                   <div className="form-group">
-                    <label>Identifiant ou Mail</label>
+                    <label>E-mail ou Identifiant</label>
                     <input type="text" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} required />
                   </div>
                   <div className="form-group">
@@ -591,7 +586,7 @@ if (token) {
             </div>
           )}
 
-{/* VUE : REGISTER (MODIFIÉE POUR ÉTUDIANTS UNIQUEMENT) */}
+          {/* VUE : REGISTER */}
           {vueActuelle === 'register' && (
             <div className="form-card-container">
               <div className="card form-card">
@@ -610,7 +605,6 @@ if (token) {
                       {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
-                  
                   <button type="submit" className="btn-download" style={{marginTop:'15px'}}>S'inscrire</button>
                 </form>
                 <button onClick={() => setVueActuelle('login')} className="btn-secondary" style={{marginTop: '1rem', width: '100%'}}>Déjà inscrit ?</button>
@@ -618,6 +612,7 @@ if (token) {
             </div>
           )}
 
+          {/* VUE : CREATE SAE */}
           {vueActuelle === 'create-sae' && (
             <div className="form-card-container">
               <div className="card form-card" style={{maxWidth:'600px'}}>
@@ -657,7 +652,7 @@ if (token) {
             </div>
           )}
 
-          {/* NOUVEAU : VUE CRÉATION D'ANNONCE */}
+          {/* VUE : CRÉATION D'ANNONCE */}
           {vueActuelle === 'create-annonce' && (
             <div className="form-card-container">
               <div className="card form-card" style={{maxWidth:'600px'}}>
@@ -691,7 +686,8 @@ if (token) {
               </div>
             </div>
           )}
-
+          
+          {/* VUE : MODIFICATION SAE */}
           {vueActuelle === 'edit-sae' && (
             <div className="form-card-container">
               <div className="card form-card" style={{maxWidth:'600px'}}>
@@ -731,6 +727,7 @@ if (token) {
             </div>
           )}
 
+          {/* VUE : PROFIL */}
           {vueActuelle === 'profile' && (
             <div className="form-card-container">
               <div className="card form-card" style={{maxWidth:'600px'}}>
@@ -783,6 +780,7 @@ if (token) {
             </div>
           )}
 
+          {/* VUE : ADMIN */}
           {vueActuelle === 'admin' && (
             <div className="admin-layout">
               <div className="card" style={{marginBottom: '2rem'}}>
@@ -793,6 +791,7 @@ if (token) {
                   <button onClick={() => handleGenerate('saes')} className="btn-secondary">📚 Générer SAEs</button>
                 </div>
               </div>
+
               {/* NOUVEAU : FORMULAIRE DE CRÉATION MANUELLE ADMIN */}
               <div className="card" style={{marginBottom: '2rem'}}>
                 <h2>Créer un compte manuellement</h2>
@@ -841,6 +840,7 @@ if (token) {
                    <button type="submit" className="btn-secondary" style={{marginTop: '10px'}}>Créer le compte</button>
                 </form>
               </div>
+
               <div className="card">
                 <h2>Base de données des Comptes</h2>
                 <div style={{overflowX: 'auto'}}>
