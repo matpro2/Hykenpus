@@ -95,6 +95,8 @@ async function initDB() {
     console.log("✅ Base de données locale prête (Avec système d'Annonces) !");
 }
 
+initDB();
+
 app.get('/api/public/sae', async (req, res) => {
     try {
         const rows = await db.all(`
