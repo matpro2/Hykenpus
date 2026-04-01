@@ -71,7 +71,6 @@ async function initDB() {
             FOREIGN KEY (etudiant_id) REFERENCES Comptes(id) ON DELETE CASCADE
         );
 
-        -- NOUVEAU : TABLE DES ANNONCES
         CREATE TABLE IF NOT EXISTS Annonces (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             auteur_id INTEGER NOT NULL,
@@ -94,7 +93,6 @@ async function initDB() {
     }
     console.log("✅ Base de données locale prête (Avec système d'Annonces) !");
 }
-
 initDB();
 
 app.get('/api/public/sae', async (req, res) => {
@@ -163,7 +161,6 @@ app.get('/api/sae', verifierToken, async (req, res) => {
             const rows = await db.all('SELECT * FROM SAE');
             return res.json(rows);
         } else if (req.user.role === 'enseignant') {
-            // NOUVEAU : On compte automatiquement les rendus et les étudiants ciblés !
             const rows = await db.all(`
                 SELECT SAE.*, 
                        (SELECT COUNT(*) FROM Rendus WHERE Rendus.sae_id = SAE.id) AS nb_rendus,
@@ -362,9 +359,6 @@ app.put('/api/users/me', verifierToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: "Erreur lors de la mise à jour." }); }
 });
 
-// --- NOUVELLES ROUTES : GESTION DES CLASSES PAR L'ENSEIGNANT ---
-
-// 1. Récupérer la liste de TOUS les étudiants (pour que le prof puisse les ajouter)
 app.get('/api/enseignant/etudiants', verifierToken, async (req, res) => {
     if (req.user.role !== 'enseignant' && req.user.role !== 'admin') return res.status(403).json({ message: "Refusé" });
     try {
@@ -373,7 +367,6 @@ app.get('/api/enseignant/etudiants', verifierToken, async (req, res) => {
     } catch (error) { res.status(500).json({ message: "Erreur serveur" }); }
 });
 
-// 2. Assigner un élève à une classe
 app.put('/api/enseignant/etudiants/:id/classe', verifierToken, async (req, res) => {
     if (req.user.role !== 'enseignant' && req.user.role !== 'admin') return res.status(403).json({ message: "Refusé" });
     const { nouvelleClasse } = req.body;
@@ -383,21 +376,27 @@ app.put('/api/enseignant/etudiants/:id/classe', verifierToken, async (req, res) 
     } catch (error) { res.status(500).json({ message: "Erreur" }); }
 });
 
-// --- NOUVELLES ROUTES : ANNONCES ---
+// --- ROUTES CORRIGÉES : ANNONCES ---
 app.get('/api/annonces', verifierToken, async (req, res) => {
     try {
         if (req.user.role === 'admin') {
-            const rows = await db.all(`SELECT Annonces.*, Comptes.nom, Comptes.prenom, SAE.nom AS sae_nom FROM Annonces JOIN Comptes ON Annonces.auteur_id = Comptes.id LEFT JOIN SAE ON Annonces.sae_id = SAE.id ORDER BY id DESC`);
+            // NOUVEAU : On précise Annonces.id pour le ORDER BY
+            const rows = await db.all(`SELECT Annonces.*, Comptes.nom, Comptes.prenom, SAE.nom AS sae_nom FROM Annonces JOIN Comptes ON Annonces.auteur_id = Comptes.id LEFT JOIN SAE ON Annonces.sae_id = SAE.id ORDER BY Annonces.id DESC`);
             return res.json(rows);
         } else if (req.user.role === 'enseignant') {
-            const rows = await db.all(`SELECT Annonces.*, Comptes.nom, Comptes.prenom, SAE.nom AS sae_nom FROM Annonces JOIN Comptes ON Annonces.auteur_id = Comptes.id LEFT JOIN SAE ON Annonces.sae_id = SAE.id WHERE auteur_id = ? ORDER BY id DESC`, [req.user.id]);
+            // NOUVEAU : On précise Annonces.auteur_id et Annonces.id
+            const rows = await db.all(`SELECT Annonces.*, Comptes.nom, Comptes.prenom, SAE.nom AS sae_nom FROM Annonces JOIN Comptes ON Annonces.auteur_id = Comptes.id LEFT JOIN SAE ON Annonces.sae_id = SAE.id WHERE Annonces.auteur_id = ? ORDER BY Annonces.id DESC`, [req.user.id]);
             return res.json(rows);
         } else {
+            // NOUVEAU : On précise Annonces.id
             const userDb = await db.get('SELECT classe FROM Comptes WHERE id = ?', [req.user.id]);
-            const rows = await db.all(`SELECT Annonces.*, Comptes.nom, Comptes.prenom, SAE.nom AS sae_nom FROM Annonces JOIN Comptes ON Annonces.auteur_id = Comptes.id LEFT JOIN SAE ON Annonces.sae_id = SAE.id WHERE Annonces.classe_cible = ? OR Annonces.classe_cible = 'Toutes' ORDER BY id DESC`, [userDb.classe]);
+            const rows = await db.all(`SELECT Annonces.*, Comptes.nom, Comptes.prenom, SAE.nom AS sae_nom FROM Annonces JOIN Comptes ON Annonces.auteur_id = Comptes.id LEFT JOIN SAE ON Annonces.sae_id = SAE.id WHERE Annonces.classe_cible = ? OR Annonces.classe_cible = 'Toutes' ORDER BY Annonces.id DESC`, [userDb.classe]);
             return res.json(rows);
         }
-    } catch (error) { res.status(500).json({ message: "Erreur serveur" }); }
+    } catch (error) { 
+        console.error(error); // Permet de voir l'erreur exacte dans le terminal
+        res.status(500).json({ message: "Erreur serveur" }); 
+    }
 });
 
 app.post('/api/annonces', verifierToken, async (req, res) => {
