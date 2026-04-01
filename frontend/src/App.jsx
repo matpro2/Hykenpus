@@ -666,11 +666,45 @@ function App() {
                    </div>
                    <div className="form-group">
                       <label>Rôle :</label>
-                      <select value={adminNewRole} onChange={e => setAdminNewRole(e.target.value)}>
+                      <select value={adminNewRole} onChange={e => {
+                          setAdminNewRole(e.target.value);
+                          if(e.target.value === 'etudiant' && adminNewClasses.length > 1) {
+                              setAdminNewClasses([adminNewClasses[0]]);
+                          }
+                      }}>
                          <option value="enseignant">Enseignant</option>
                          <option value="etudiant">Étudiant</option>
                       </select>
                    </div>
+                   
+                   {/* SÉLECTION DES CLASSES (DYNAMIQUE SELON LE RÔLE) */}
+                   {adminNewRole === 'enseignant' ? (
+                      <div className="form-group" style={{marginTop: '10px', backgroundColor: 'var(--bg-main)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border)'}}>
+                         <label style={{marginBottom: '8px'}}>Classes gérées par l'enseignant :</label>
+                         <div style={{display: 'flex', gap: '15px', flexWrap: 'wrap'}}>
+                           {CLASSES_DISPOS.map(c => (
+                              <label key={c} style={{display: 'flex', alignItems: 'center', gap: '5px', fontWeight: 'normal', cursor: 'pointer', margin: 0}}>
+                                <input 
+                                  type="checkbox" 
+                                  style={{width: 'auto', margin: 0}}
+                                  checked={adminNewClasses.includes(c)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) setAdminNewClasses([...adminNewClasses, c]);
+                                    else setAdminNewClasses(adminNewClasses.filter(cls => cls !== c));
+                                  }}
+                                /> {c}
+                              </label>
+                           ))}
+                         </div>
+                      </div>
+                   ) : (
+                      <div className="form-group" style={{marginTop: '10px'}}>
+                         <label>Classe de l'étudiant :</label>
+                         <select value={adminNewClasses[0] || CLASSES_DISPOS[0]} onChange={(e) => setAdminNewClasses([e.target.value])}>
+                           {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
+                         </select>
+                      </div>
+                   )}
                    <div style={{display: 'flex', gap: '10px', marginTop: '10px'}}>
                       <button type="submit" className="btn-primary">{isEditingUser ? 'Enregistrer' : 'Créer le compte'}</button>
                       {isEditingUser && <button type="button" className="btn-secondary" onClick={() => setIsEditingUser(false)}>Annuler</button>}
