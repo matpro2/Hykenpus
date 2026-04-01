@@ -6,18 +6,15 @@ import './App.css';
 const CLASSES_DISPOS = ['MMI-A1', 'MMI-A2', 'MMI-B1', 'MMI-B2', 'MMI-C1', 'MMI-C2'];
 
 function App() {
-  // --- ÉTATS D'AUTHENTIFICATION & NAVIGATION ---
   const [token, setToken] = useState(localStorage.getItem('jwtToken') || null);
   const [role, setRole] = useState(localStorage.getItem('userRole') || null);
   const [prenomUser, setPrenomUser] = useState(localStorage.getItem('userPrenom') || '');
   const [vueActuelle, setVueActuelle] = useState('public');
   const [loading, setLoading] = useState(false);
 
-  // --- ÉTAT DU THÈME (MODE SOMBRE) ---
   const [isDarkMode, setIsDarkMode] = useState(localStorage.getItem('theme') === 'dark');
 
-  // --- ÉTATS FORMULAIRES ---
-  const [identifiant, setIdentifiant] = useState(''); // Utilisé pour Email ou Login
+  const [identifiant, setIdentifiant] = useState(''); 
   const [password, setPassword] = useState('');
   const [nom, setNom] = useState('');
   const [prenom, setPrenom] = useState('');
@@ -30,7 +27,11 @@ function App() {
   const [classeCible, setClasseCible] = useState('Toutes');
   const [fichiersSae, setFichiersSae] = useState([]);
 
-  // --- ÉTATS DATA & UI ---
+  // NOUVEAU : États pour la vue détails et le dépôt du travail
+  const [selectedSae, setSelectedSae] = useState(null);
+  const [selectedRendu, setSelectedRendu] = useState(null);
+  const [fichiersRendu, setFichiersRendu] = useState([]);
+
   const [saes, setSaes] = useState([]);
   const [listeUtilisateurs, setListeUtilisateurs] = useState([]);
   const [quantiteGeneration, setQuantiteGeneration] = useState(10);
@@ -38,7 +39,6 @@ function App() {
   const [erreur, setErreur] = useState(null);
   const [succes, setSucces] = useState(null);
 
-  // --- LOGIQUE DU THÈME ---
   useEffect(() => {
     if (isDarkMode) {
       document.body.classList.add('dark-mode');
@@ -51,76 +51,49 @@ function App() {
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
-  // --- LOGIQUE INITIALE (CHARGEMENT DATA) ---
   useEffect(() => {
     setLoading(true);
     setErreur(null);
     if (token) {
-      if (['public', 'login', 'register'].includes(vueActuelle)) {
-        setVueActuelle('dashboard');
-      }
-      saeService.getListeSae(token)
-        .then(setSaes)
-        .catch(handleLogout)
-        .finally(() => setLoading(false));
-
-      if (vueActuelle === 'admin' && role === 'admin') {
-        saeService.getAllUsers(token).then(setListeUtilisateurs).catch(console.error);
-      }
+      if (['public', 'login', 'register'].includes(vueActuelle)) setVueActuelle('dashboard');
+      saeService.getListeSae(token).then(setSaes).catch(handleLogout).finally(() => setLoading(false));
+      if (vueActuelle === 'admin' && role === 'admin') saeService.getAllUsers(token).then(setListeUtilisateurs).catch(console.error);
     } else {
-      setVueActuelle(prev => ['dashboard', 'create-sae', 'admin'].includes(prev) ? 'public' : prev);
-      saeService.getPublicListeSae()
-        .then(setSaes)
-        .catch(console.error)
-        .finally(() => setLoading(false));
+      setVueActuelle(prev => ['dashboard', 'create-sae', 'admin', 'sae-details'].includes(prev) ? 'public' : prev);
+      saeService.getPublicListeSae().then(setSaes).catch(console.error).finally(() => setLoading(false));
     }
   }, [token, vueActuelle, role]);
 
-  // --- HANDLERS ---
   const handleLogin = async (e) => {
-    e.preventDefault();
-    setErreur(null);
+    e.preventDefault(); setErreur(null);
     try {
-      // On envoie "identifiant" au champ attendu par l'API (mail)
       const data = await saeService.login(identifiant, password);
       setToken(data.token); setRole(data.role); setPrenomUser(data.prenom);
-      localStorage.setItem('jwtToken', data.token); 
-      localStorage.setItem('userRole', data.role); 
-      localStorage.setItem('userPrenom', data.prenom);
-      setIdentifiant(''); setPassword('');
-      setVueActuelle('dashboard');
+      localStorage.setItem('jwtToken', data.token); localStorage.setItem('userRole', data.role); localStorage.setItem('userPrenom', data.prenom);
+      setIdentifiant(''); setPassword(''); setVueActuelle('dashboard');
     } catch (err) { setErreur(err.message); }
   };
 
   const handleRegister = async (e) => {
-    e.preventDefault();
-    setErreur(null);
+    e.preventDefault(); setErreur(null);
     try {
       await saeService.register({ nom, prenom, mail: identifiant, password, role: roleInscription, classe: classeInscription });
       const data = await saeService.login(identifiant, password);
       setToken(data.token); setRole(data.role); setPrenomUser(data.prenom);
       localStorage.setItem('jwtToken', data.token); localStorage.setItem('userRole', data.role); localStorage.setItem('userPrenom', data.prenom);
-      setIdentifiant(''); setPassword('');
-      setVueActuelle('dashboard');
+      setIdentifiant(''); setPassword(''); setVueActuelle('dashboard');
     } catch (err) { setErreur(err.message); }
   };
 
   const handleCreateSae = async (e) => {
-    e.preventDefault();
-    setErreur(null);
+    e.preventDefault(); setErreur(null);
     try {
       const formData = new FormData();
-      formData.append('nom', nomSae);
-      formData.append('description', descriptionSae);
-      formData.append('date_rendu', dateRenduSae);
-      formData.append('classe_cible', classeCible);
+      formData.append('nom', nomSae); formData.append('description', descriptionSae); formData.append('date_rendu', dateRenduSae); formData.append('classe_cible', classeCible);
       fichiersSae.forEach(f => formData.append('fichiers', f));
-
       await saeService.createSae(formData, token);
       const data = await saeService.getListeSae(token);
-      setSaes(data);
-      setNomSae(''); setDescriptionSae(''); setVueActuelle('dashboard');
-      setSucces("SAE publiée avec succès !");
+      setSaes(data); setNomSae(''); setDescriptionSae(''); setVueActuelle('dashboard'); setSucces("SAE publiée !");
     } catch (err) { setErreur(err.message); }
   };
 
@@ -149,13 +122,41 @@ function App() {
     setSaes([]); setVueActuelle('public');
   };
 
-  // --- UTILS ---
+  // NOUVEAU : Ouvrir les détails d'une SAE
+  const openSaeDetails = async (saeId) => {
+    setErreur(null); setSucces(null);
+    try {
+      const data = await saeService.getSaeDetails(saeId, token);
+      setSelectedSae(data.sae);
+      setSelectedRendu(data.rendu);
+      setVueActuelle('sae-details');
+    } catch(err) { setErreur(err.message); }
+  };
+
+  // NOUVEAU : Déposer un travail
+  const handleSubmitRendu = async (e) => {
+    e.preventDefault(); setErreur(null); setSucces(null);
+    if (fichiersRendu.length === 0) return setErreur("Veuillez joindre au moins un fichier.");
+    try {
+      const formData = new FormData();
+      fichiersRendu.forEach(f => formData.append('fichiers', f));
+      await saeService.soumettreRendu(selectedSae.id, formData, token);
+      setSucces("Travail rendu avec succès !");
+      setFichiersRendu([]);
+      // On rafraîchit les détails
+      const data = await saeService.getSaeDetails(selectedSae.id, token);
+      setSelectedRendu(data.rendu);
+      
+      // On rafraîchit aussi le tableau de bord en arrière-plan
+      const newList = await saeService.getListeSae(token);
+      setSaes(newList);
+    } catch(err) { setErreur(err.message); }
+  };
+
   const saesTriees = [...saes].sort((a, b) => {
     if (!a.date_rendu) return 1;
     if (!b.date_rendu) return -1;
-    return triDate === 'asc' 
-      ? new Date(a.date_rendu) - new Date(b.date_rendu) 
-      : new Date(b.date_rendu) - new Date(a.date_rendu);
+    return triDate === 'asc' ? new Date(a.date_rendu) - new Date(b.date_rendu) : new Date(b.date_rendu) - new Date(a.date_rendu);
   });
 
   const formatDateTime = (d) => {
@@ -164,36 +165,42 @@ function App() {
     return isNaN(obj) ? d : obj.toLocaleDateString('fr-FR') + ' à ' + obj.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
   };
 
+  // NOUVEAU : Fonction pour déterminer le statut d'une SAE
+  const determinerStatut = (sae) => {
+    // Si l'étudiant a un rendu_id (venant du LEFT JOIN du backend)
+    if (sae.rendu_id || selectedRendu) {
+       return { texte: 'Terminée', couleur: 'success' };
+    }
+    if (!sae.date_rendu) return { texte: 'En cours', couleur: 'primary' };
+    
+    const isRetard = new Date(sae.date_rendu) < new Date();
+    if (isRetard) return { texte: 'En retard', couleur: 'danger' };
+    return { texte: 'En cours', couleur: 'primary' };
+  };
+
   return (
     <div className="app-container">
-      {/* SIDEBAR */}
       <aside className="sidebar">
         <div className="logo">🛡️ MMI Hub</div>
-        
         <nav className="nav-group">
           <span className="nav-label">Navigation</span>
           <div className={`nav-item ${['dashboard', 'public'].includes(vueActuelle) ? 'active' : ''}`} onClick={() => setVueActuelle(token ? 'dashboard' : 'public')}>
             🏠 Tableau de bord
           </div>
-          
           {token && (role === 'enseignant' || role === 'admin') && (
             <div className={`nav-item ${vueActuelle === 'create-sae' ? 'active' : ''}`} onClick={() => setVueActuelle('create-sae')}>
               ➕ Créer une SAE
             </div>
           )}
-
           {token && role === 'admin' && (
             <div className={`nav-item ${vueActuelle === 'admin' ? 'active' : ''}`} onClick={() => setVueActuelle('admin')}>
               👑 Administration
             </div>
           )}
-
-          {/* TOGGLE MODE SOMBRE */}
           <div className="nav-item theme-toggle" onClick={toggleTheme} style={{marginTop: 'auto', borderTop: '1px solid var(--border-color)', paddingTop: '1rem'}}>
             {isDarkMode ? '☀️ Mode Clair' : '🌙 Mode Sombre'}
           </div>
         </nav>
-
         <div className="sidebar-footer">
           {token ? (
             <div className="user-profile">
@@ -212,18 +219,17 @@ function App() {
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
       <main className="main-layout">
         <header className="header">
           <div className="header-left">
             <h1>{
               vueActuelle === 'admin' ? 'Panneau de contrôle' : 
               vueActuelle === 'create-sae' ? 'Nouvelle SAE' : 
+              vueActuelle === 'sae-details' ? 'Détails de la SAE' :
               'Situations d\'Apprentissage'
             }</h1>
             {token && <div className="badge badge-primary">Session 2025-2026</div>}
           </div>
-          
           {(vueActuelle === 'dashboard' || vueActuelle === 'public') && (
             <select className="tri-select" value={triDate} onChange={(e) => setTriDate(e.target.value)}>
               <option value="asc">Date : Plus proche</option>
@@ -240,32 +246,96 @@ function App() {
           {(vueActuelle === 'dashboard' || vueActuelle === 'public') && (
             <div className="sae-grid">
               {loading ? <p>Chargement des ressources...</p> : 
-               saesTriees.length > 0 ? saesTriees.map(sae => (
-                <div key={sae.id} className="card">
-                  <div className="card-header">
-                    <span className="badge badge-primary">{sae.classe_cible}</span>
-                    <span className="badge badge-warning">PDF</span>
-                  </div>
-                  <h3 className="card-title">{sae.nom}</h3>
-                  <p className="card-desc">{sae.description}</p>
-                  <div className="card-meta">
-                    {sae.date_rendu && <span>📅 À rendre : {formatDateTime(sae.date_rendu)}</span>}
-                  </div>
-                  {sae.documents && (
-                    <div className="file-links">
-                      {JSON.parse(sae.documents).map((file, i) => (
-                        <a key={i} href={`${SERVER_URL}/uploads/${file}`} target="_blank" rel="noreferrer" className="btn-download">
-                          📄 Voir le sujet {i > 0 ? i + 1 : ''}
-                        </a>
-                      ))}
+               saesTriees.length > 0 ? saesTriees.map(sae => {
+                 const statut = determinerStatut(sae);
+                 return (
+                  <div key={sae.id} className="card" style={{ cursor: token ? 'pointer' : 'default' }} onClick={() => token && openSaeDetails(sae.id)}>
+                    <div className="card-header">
+                      <span className="badge badge-primary">{sae.classe_cible}</span>
+                      {/* NOUVEAU : Affichage dynamique du statut pour les étudiants */}
+                      {role === 'etudiant' && (
+                          <span className={`badge badge-${statut.couleur}`}>{statut.texte}</span>
+                      )}
                     </div>
-                  )}
-                </div>
-              )) : <p className="text-muted">Aucune SAE disponible pour le moment.</p>}
+                    <h3 className="card-title">{sae.nom}</h3>
+                    <p className="card-desc" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis'}}>{sae.description}</p>
+                    <div className="card-meta">
+                      {sae.date_rendu && <span>📅 À rendre : {formatDateTime(sae.date_rendu)}</span>}
+                    </div>
+                    
+                    {/* Le bouton "Ouvrir" à la place des liens PDF directs pour pousser au clic */}
+                    {token && <button className="btn-secondary" style={{width:'100%', marginTop:'1rem'}}>Voir & Rendre le travail</button>}
+                  </div>
+                 );
+              }) : <p className="text-muted">Aucune SAE disponible pour le moment.</p>}
             </div>
           )}
 
-          {/* VUE : LOGIN */}
+          {/* VUE : DÉTAILS DE LA SAE (AVEC DÉPÔT) */}
+          {vueActuelle === 'sae-details' && selectedSae && (
+            <div className="admin-layout">
+              <div className="card" style={{marginBottom: '2rem'}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
+                   <h2>{selectedSae.nom}</h2>
+                   <button onClick={() => setVueActuelle('dashboard')} className="btn-secondary">🔙 Retour</button>
+                </div>
+                {selectedSae.date_rendu && <p style={{fontWeight:'bold', color:'var(--danger)', marginTop:'10px'}}>📅 Date limite : {formatDateTime(selectedSae.date_rendu)}</p>}
+                
+                <div style={{backgroundColor: 'var(--bg-color)', padding: '1rem', borderRadius: '8px', marginTop: '1rem', border: '1px solid var(--border-color)'}}>
+                   <p style={{whiteSpace: 'pre-line'}}>{selectedSae.description}</p>
+                </div>
+
+                {selectedSae.documents && JSON.parse(selectedSae.documents).length > 0 && (
+                   <div style={{marginTop: '1.5rem'}}>
+                     <h3>📎 Ressources fournies par l'enseignant</h3>
+                     <div className="file-links" style={{marginTop:'10px'}}>
+                        {JSON.parse(selectedSae.documents).map((file, i) => (
+                          <a key={i} href={`${SERVER_URL}/uploads/${file}`} target="_blank" rel="noreferrer" className="btn-download">
+                            📄 {file.split('-').slice(1).join('-')}
+                          </a>
+                        ))}
+                     </div>
+                   </div>
+                )}
+              </div>
+
+              {/* LA ZONE DE RENDU POUR L'ÉTUDIANT */}
+              {role === 'etudiant' && (
+                 <div className="card" style={{border: selectedRendu ? '2px solid var(--success)' : '2px solid var(--primary)'}}>
+                    <h2 style={{color: selectedRendu ? 'var(--success)' : 'inherit'}}>
+                       {selectedRendu ? '✅ Mon travail rendu' : '📤 Déposer mon travail'}
+                    </h2>
+                    
+                    {selectedRendu ? (
+                       <div>
+                         <p style={{color: 'var(--text-muted)'}}>Soumis le : {formatDateTime(selectedRendu.date_soumission)}</p>
+                         <div className="file-links" style={{marginTop:'10px', marginBottom: '1.5rem'}}>
+                            {JSON.parse(selectedRendu.documents).map((file, i) => (
+                              <a key={i} href={`${SERVER_URL}/uploads/${file}`} target="_blank" rel="noreferrer" className="btn-secondary">
+                                📁 {file.split('-').slice(1).join('-')}
+                              </a>
+                            ))}
+                         </div>
+                         <hr style={{borderColor: 'var(--border-color)', margin: '1rem 0'}}/>
+                         <p style={{fontSize: '0.9rem', color: 'var(--text-muted)'}}>Vous pouvez écraser votre rendu en déposant de nouveaux fichiers ci-dessous.</p>
+                       </div>
+                    ) : (
+                       <p style={{color: 'var(--text-muted)', marginBottom: '1rem'}}>
+                          Sélectionnez vos fichiers (PDF, ZIP, Word...) pour valider cette SAE.
+                       </p>
+                    )}
+
+                    <form onSubmit={handleSubmitRendu} style={{display: 'flex', gap: '10px', alignItems: 'center'}}>
+                       <input type="file" multiple required onChange={(e) => setFichiersRendu(Array.from(e.target.files))} style={{flex: 1, padding: '0.5rem', border: '1px solid var(--border-color)', borderRadius: '6px'}}/>
+                       <button type="submit" className="btn-download" style={{margin: 0}}>{selectedRendu ? 'Mettre à jour' : 'Envoyer'}</button>
+                    </form>
+                 </div>
+              )}
+            </div>
+          )}
+
+          {/* ... LES AUTRES VUES (LOGIN, REGISTER, CREATE, ADMIN) RESTENT IDENTIQUES AU PRÉCÉDENT ... */}
+          
           {vueActuelle === 'login' && (
             <div className="form-card-container">
               <div className="card form-card">
@@ -273,23 +343,11 @@ function App() {
                 <form onSubmit={handleLogin}>
                   <div className="form-group">
                     <label>E-mail ou Identifiant</label>
-                    <input 
-                      type="text" 
-                      placeholder="Identifiant"
-                      value={identifiant} 
-                      onChange={(e) => setIdentifiant(e.target.value)} 
-                      required 
-                    />
+                    <input type="text" placeholder="Identifiant" value={identifiant} onChange={(e) => setIdentifiant(e.target.value)} required />
                   </div>
                   <div className="form-group">
                     <label>Mot de passe</label>
-                    <input 
-                      type="password" 
-                      placeholder="••••••••"
-                      value={password} 
-                      onChange={(e) => setPassword(e.target.value)} 
-                      required 
-                    />
+                    <input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
                   </div>
                   <button type="submit" className="btn-download">Se connecter</button>
                 </form>
@@ -298,7 +356,6 @@ function App() {
             </div>
           )}
 
-          {/* VUE : REGISTER */}
           {vueActuelle === 'register' && (
             <div className="form-card-container">
               <div className="card form-card">
@@ -328,7 +385,6 @@ function App() {
             </div>
           )}
 
-          {/* VUE : CREATE SAE */}
           {vueActuelle === 'create-sae' && (
             <div className="form-card-container">
               <div className="card form-card" style={{maxWidth:'600px'}}>
@@ -368,7 +424,6 @@ function App() {
             </div>
           )}
 
-          {/* VUE : ADMIN */}
           {vueActuelle === 'admin' && (
             <div className="admin-layout">
               <div className="card" style={{marginBottom: '2rem'}}>

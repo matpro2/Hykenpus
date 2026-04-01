@@ -60,6 +60,17 @@ async function initDB() {
             classe_cible TEXT,
             FOREIGN KEY (auteur_id) REFERENCES Comptes(id) ON DELETE CASCADE
         );
+
+        -- NOUVEAU : TABLE POUR LES RENDUS DES ÉTUDIANTS
+        CREATE TABLE IF NOT EXISTS Rendus (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sae_id INTEGER NOT NULL,
+            etudiant_id INTEGER NOT NULL,
+            date_soumission TEXT NOT NULL,
+            documents TEXT,
+            FOREIGN KEY (sae_id) REFERENCES SAE(id) ON DELETE CASCADE,
+            FOREIGN KEY (etudiant_id) REFERENCES Comptes(id) ON DELETE CASCADE
+        );
     `);
 
     const adminExists = await db.get('SELECT * FROM Comptes WHERE mail = ?', ['Admin']);
@@ -70,7 +81,7 @@ async function initDB() {
             ['Système', 'Admin', 'Admin', hashedAdminPw, 'admin', '["Toutes"]']
         );
     }
-    console.log("✅ Base de données locale prête (Avec page Profil) !");
+    console.log("✅ Base de données locale prête (Avec système de Rendus) !");
 }
 initDB();
 
@@ -144,7 +155,13 @@ app.get('/api/sae', verifierToken, async (req, res) => {
             return res.json(rows);
         } else {
             const userDb = await db.get('SELECT classe FROM Comptes WHERE id = ?', [req.user.id]);
-            const rows = await db.all('SELECT * FROM SAE WHERE classe_cible = ? OR classe_cible = ?', [userDb.classe, 'Toutes']);
+            // NOUVEAU : On fait un LEFT JOIN pour savoir si l'étudiant a rendu la SAE
+            const rows = await db.all(`
+                SELECT SAE.*, Rendus.id AS rendu_id, Rendus.date_soumission 
+                FROM SAE 
+                LEFT JOIN Rendus ON SAE.id = Rendus.sae_id AND Rendus.etudiant_id = ?
+                WHERE SAE.classe_cible = ? OR SAE.classe_cible = 'Toutes'
+            `, [req.user.id, userDb.classe]);
             return res.json(rows);
         }
     } catch (error) {
@@ -175,6 +192,49 @@ app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, re
     }
 });
 
+// NOUVEAU : Récupérer les détails d'une seule SAE (avec le rendu de l'étudiant)
+app.get('/api/sae/:id', verifierToken, async (req, res) => {
+    try {
+        const sae = await db.get('SELECT * FROM SAE WHERE id = ?', [req.params.id]);
+        if (!sae) return res.status(404).json({ message: "SAE introuvable" });
+
+        let rendu = null;
+        if (req.user.role === 'etudiant') {
+            rendu = await db.get('SELECT * FROM Rendus WHERE sae_id = ? AND etudiant_id = ?', [req.params.id, req.user.id]);
+        }
+        res.json({ sae, rendu });
+    } catch (error) {
+        res.status(500).json({ message: "Erreur serveur" });
+    }
+});
+
+// NOUVEAU : Déposer un travail (Rendu)
+app.post('/api/sae/:id/rendu', verifierToken, upload.array('fichiers', 5), async (req, res) => {
+    if (req.user.role !== 'etudiant') return res.status(403).json({ message: "Seuls les étudiants peuvent rendre un travail." });
+
+    const sae_id = req.params.id;
+    const etudiant_id = req.user.id;
+    const date_soumission = new Date().toISOString(); 
+
+    const fichiersNoms = req.files ? req.files.map(f => f.filename) : [];
+    const documentsStr = JSON.stringify(fichiersNoms);
+
+    try {
+        // On vérifie si l'étudiant avait déjà rendu un truc (pour l'écraser)
+        const existing = await db.get('SELECT id FROM Rendus WHERE sae_id = ? AND etudiant_id = ?', [sae_id, etudiant_id]);
+        
+        if (existing) {
+            await db.run('UPDATE Rendus SET date_soumission = ?, documents = ? WHERE id = ?', [date_soumission, documentsStr, existing.id]);
+        } else {
+            await db.run('INSERT INTO Rendus (sae_id, etudiant_id, date_soumission, documents) VALUES (?, ?, ?, ?)', [sae_id, etudiant_id, date_soumission, documentsStr]);
+        }
+        res.status(201).json({ message: "Travail rendu avec succès !" });
+    } catch (error) {
+        res.status(500).json({ message: "Erreur lors du rendu" });
+    }
+});
+
+// ADMIN MOCK DATA (Génération)
 app.post('/api/admin/generate', verifierToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ message: "Accès refusé." });
     
@@ -221,7 +281,8 @@ app.post('/api/admin/generate', verifierToken, async (req, res) => {
                 const date_c = new Date().toISOString().split('T')[0];
                 
                 const futureDate = new Date();
-                futureDate.setDate(futureDate.getDate() + Math.floor(Math.random() * 60) + 1); 
+                // Génère des dates entre le passé (-10 jours) et le futur (+20 jours) pour tester les retards
+                futureDate.setDate(futureDate.getDate() + Math.floor(Math.random() * 30) - 10); 
                 futureDate.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60)); 
                 const date_r = futureDate.toISOString().slice(0, 16); 
                 const docs = "[]";
@@ -239,64 +300,40 @@ app.post('/api/admin/generate', verifierToken, async (req, res) => {
     }
 });
 
+// ... autres routes admin et profil inchangées ...
 app.get('/api/admin/users', verifierToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ message: "Accès refusé." });
     try {
         const users = await db.all('SELECT id, nom, prenom, mail, role, classe FROM Comptes ORDER BY id DESC');
         res.json(users);
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur." });
-    }
+    } catch (error) { res.status(500).json({ message: "Erreur serveur." }); }
 });
-
 app.post('/api/admin/impersonate', verifierToken, async (req, res) => {
     if (req.user.role !== 'admin') return res.status(403).json({ message: "Accès refusé." });
-    
     const { userId } = req.body;
     try {
         const user = await db.get('SELECT * FROM Comptes WHERE id = ?', [userId]);
         if (!user) return res.status(404).json({ message: "Introuvable." });
-
         const token = jwt.sign({ id: user.id, mail: user.mail, role: user.role, classe: user.classe }, SECRET_KEY, { expiresIn: '2h' });
         res.json({ token, role: user.role, nom: user.nom, prenom: user.prenom, classe: user.classe });
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur." });
-    }
+    } catch (error) { res.status(500).json({ message: "Erreur serveur." }); }
 });
-
-// --- NOUVELLES ROUTES POUR LE PROFIL ---
-
-// Récupérer mes propres informations
 app.get('/api/users/me', verifierToken, async (req, res) => {
     try {
         const user = await db.get('SELECT nom, prenom, mail, role, classe FROM Comptes WHERE id = ?', [req.user.id]);
         if (!user) return res.status(404).json({ message: "Compte introuvable" });
         res.json(user);
-    } catch (error) {
-        res.status(500).json({ message: "Erreur serveur" });
-    }
+    } catch (error) { res.status(500).json({ message: "Erreur serveur" }); }
 });
-
-// Mettre à jour mon profil (et mes classes !)
 app.put('/api/users/me', verifierToken, async (req, res) => {
     const { nom, prenom, mail, classe } = req.body;
     try {
-        // Vérifie si la nouvelle adresse mail n'appartient pas déjà à quelqu'un d'autre
         const existing = await db.get('SELECT id FROM Comptes WHERE mail = ? AND id != ?', [mail, req.user.id]);
-        if (existing) return res.status(400).json({ message: "Cet email est déjà utilisé par un autre compte." });
-
-        await db.run(
-            'UPDATE Comptes SET nom = ?, prenom = ?, mail = ?, classe = ? WHERE id = ?',
-            [nom, prenom, mail, classe, req.user.id]
-        );
-
-        // On regénère un Token tout neuf avec les nouvelles infos !
+        if (existing) return res.status(400).json({ message: "Cet email est déjà utilisé." });
+        await db.run('UPDATE Comptes SET nom = ?, prenom = ?, mail = ?, classe = ? WHERE id = ?', [nom, prenom, mail, classe, req.user.id]);
         const token = jwt.sign({ id: req.user.id, mail: mail, role: req.user.role, classe: classe }, SECRET_KEY, { expiresIn: '2h' });
-        
-        res.json({ token, nom, prenom, classe, message: "Profil mis à jour avec succès !" });
-    } catch (error) {
-        res.status(500).json({ message: "Erreur lors de la mise à jour." });
-    }
+        res.json({ token, nom, prenom, classe, message: "Profil mis à jour !" });
+    } catch (error) { res.status(500).json({ message: "Erreur lors de la mise à jour." }); }
 });
 
 app.listen(PORT, () => {
