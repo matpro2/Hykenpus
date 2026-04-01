@@ -150,7 +150,14 @@ app.get('/api/sae', verifierToken, async (req, res) => {
             const rows = await db.all('SELECT * FROM SAE');
             return res.json(rows);
         } else if (req.user.role === 'enseignant') {
-            const rows = await db.all('SELECT * FROM SAE WHERE auteur_id = ?', [req.user.id]);
+            // NOUVEAU : On compte automatiquement les rendus et les étudiants ciblés !
+            const rows = await db.all(`
+                SELECT SAE.*, 
+                       (SELECT COUNT(*) FROM Rendus WHERE Rendus.sae_id = SAE.id) AS nb_rendus,
+                       (SELECT COUNT(*) FROM Comptes WHERE role = 'etudiant' AND (Comptes.classe = SAE.classe_cible OR SAE.classe_cible = 'Toutes')) AS nb_etudiants_cibles
+                FROM SAE 
+                WHERE auteur_id = ?
+            `, [req.user.id]);
             return res.json(rows);
         } else {
             const userDb = await db.get('SELECT classe FROM Comptes WHERE id = ?', [req.user.id]);

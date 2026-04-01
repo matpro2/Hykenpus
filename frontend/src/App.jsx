@@ -396,11 +396,19 @@ function App() {
           )}
 
           {/* VUE : DASHBOARD / PUBLIC */}
+{/* VUE : DASHBOARD / PUBLIC */}
           {(vueActuelle === 'dashboard' || vueActuelle === 'public') && (
             <div className="sae-grid">
               {loading ? <p>Chargement des ressources...</p> : 
                getSaesTriees(saes).length > 0 ? getSaesTriees(saes).map(sae => {
                  const statut = determinerStatut(sae);
+                 
+                 // NOUVEAU : Calcul du pourcentage de rendus pour le prof
+                 let pourcentage = 0;
+                 if (role === 'enseignant' && sae.nb_etudiants_cibles > 0) {
+                     pourcentage = Math.round((sae.nb_rendus / sae.nb_etudiants_cibles) * 100);
+                 }
+
                  return (
                   <div key={sae.id} className="card" style={{ cursor: token ? 'pointer' : 'default' }} onClick={() => token && openSaeDetails(sae.id)}>
                     <div className="card-header">
@@ -414,7 +422,22 @@ function App() {
                     <div className="card-meta">
                       {sae.date_rendu && <span>📅 À rendre : {formatDateTime(sae.date_rendu)}</span>}
                     </div>
-                    {token && <button className="btn-secondary" style={{width:'100%', marginTop:'1rem'}}>Voir & Rendre le travail</button>}
+                    
+                    {/* NOUVEAU : Affichage de la jauge de progression pour l'enseignant */}
+                    {role === 'enseignant' && (
+                       <div style={{ marginTop: '15px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '5px' }}>
+                             <span>Progression des rendus</span>
+                             <span>{sae.nb_rendus} / {sae.nb_etudiants_cibles} ({pourcentage}%)</span>
+                          </div>
+                          <div style={{ width: '100%', backgroundColor: '#e2e8f0', borderRadius: '4px', height: '8px', overflow: 'hidden' }}>
+                             <div style={{ width: `${pourcentage}%`, backgroundColor: pourcentage === 100 ? 'var(--success)' : 'var(--primary)', height: '100%', transition: 'width 0.3s' }}></div>
+                          </div>
+                       </div>
+                    )}
+
+                    {token && role === 'etudiant' && <button className="btn-secondary" style={{width:'100%', marginTop:'1rem'}}>Voir & Rendre le travail</button>}
+                    {token && role !== 'etudiant' && <button className="btn-secondary" style={{width:'100%', marginTop:'1rem'}}>Ouvrir la SAE</button>}
                   </div>
                  );
               }) : <p className="text-muted">Aucune SAE ne correspond à vos filtres.</p>}
