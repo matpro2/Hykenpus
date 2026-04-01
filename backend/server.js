@@ -193,18 +193,39 @@ app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, re
 });
 
 // NOUVEAU : Récupérer les détails d'une seule SAE (avec le rendu de l'étudiant)
-app.get('/api/sae/:id', verifierToken, async (req, res) => {
-    try {
-        const sae = await db.get('SELECT * FROM SAE WHERE id = ?', [req.params.id]);
-        if (!sae) return res.status(404).json({ message: "SAE introuvable" });
+// NOUVEAU : Route pour modifier une SAE existante
+app.put('/api/sae/:id', verifierToken, upload.array('fichiers', 10), async (req, res) => {
+    if (req.user.role !== 'enseignant' && req.user.role !== 'admin') {
+        return res.status(403).json({ message: "Non autorisé." });
+    }
 
-        let rendu = null;
-        if (req.user.role === 'etudiant') {
-            rendu = await db.get('SELECT * FROM Rendus WHERE sae_id = ? AND etudiant_id = ?', [req.params.id, req.user.id]);
+    const saeId = req.params.id;
+    const { nom, description, date_rendu, classe_cible } = req.body;
+
+    try {
+        // Vérifier que la SAE existe et que le prof en est bien l'auteur
+        const sae = await db.get('SELECT * FROM SAE WHERE id = ?', [saeId]);
+        if (!sae) return res.status(404).json({ message: "SAE introuvable" });
+        
+        if (req.user.role !== 'admin' && sae.auteur_id !== req.user.id) {
+            return res.status(403).json({ message: "Vous ne pouvez modifier que vos propres SAE." });
         }
-        res.json({ sae, rendu });
+
+        // Si le prof a ajouté de nouveaux fichiers, on les ajoute à la liste existante
+        let documentsStr = sae.documents; 
+        if (req.files && req.files.length > 0) {
+            const anciensDocs = JSON.parse(sae.documents || '[]');
+            const nouveauxDocs = req.files.map(f => f.filename);
+            documentsStr = JSON.stringify([...anciensDocs, ...nouveauxDocs]);
+        }
+
+        await db.run(
+            'UPDATE SAE SET nom = ?, description = ?, date_rendu = ?, classe_cible = ?, documents = ? WHERE id = ?',
+            [nom, description, date_rendu, classe_cible || 'Toutes', documentsStr, saeId]
+        );
+        res.json({ message: "SAE modifiée avec succès !" });
     } catch (error) {
-        res.status(500).json({ message: "Erreur serveur" });
+        res.status(500).json({ message: "Erreur lors de la modification" });
     }
 });
 

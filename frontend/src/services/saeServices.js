@@ -49,6 +49,20 @@ export const saeService = {
     return await response.json(); 
   },
 
+  // NOUVEAU : Modifier une SAE
+  updateSae: async (saeId, formData, token) => {
+    const response = await fetch(`${API_BASE_URL}/sae/${saeId}`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData 
+    });
+    if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || "Échec de la modification");
+    }
+    return await response.json(); 
+  },
+
   getListeSae: async (token) => {
     const options = {
       method: 'GET',

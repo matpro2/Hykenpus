@@ -139,6 +139,33 @@ function App() {
     } catch (err) { setErreur(err.message); }
   };
 
+  // NOUVEAU : Ouvrir le mode édition et pré-remplir les champs
+  const openEditSae = (sae) => {
+    setNomSae(sae.nom);
+    setDescriptionSae(sae.description);
+    setDateRenduSae(sae.date_rendu || '');
+    setClasseCible(sae.classe_cible || 'Toutes');
+    setSelectedSae(sae); 
+    setFichiersSae([]);
+    setErreur(null);
+    setVueActuelle('edit-sae');
+  };
+
+  // NOUVEAU : Envoyer les modifications
+  const handleEditSae = async (e) => {
+    e.preventDefault(); setErreur(null);
+    try {
+      const formData = new FormData();
+      formData.append('nom', nomSae); formData.append('description', descriptionSae); formData.append('date_rendu', dateRenduSae); formData.append('classe_cible', classeCible);
+      fichiersSae.forEach(f => formData.append('fichiers', f));
+
+      await saeService.updateSae(selectedSae.id, formData, token);
+      const data = await saeService.getListeSae(token);
+      setSaes(data);
+      setNomSae(''); setDescriptionSae(''); setVueActuelle('dashboard'); setSucces("SAE modifiée avec succès !");
+    } catch (err) { setErreur(err.message); }
+  };
+
   const openSaeDetails = async (saeId) => {
     setErreur(null); setSucces(null);
     try {
@@ -355,7 +382,13 @@ function App() {
               <div className="card" style={{marginBottom: '2rem'}}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
                    <h2>{selectedSae.nom}</h2>
-                   <button onClick={() => setVueActuelle('dashboard')} className="btn-secondary">🔙 Retour</button>
+                   <div>
+                     {/* NOUVEAU : Bouton Modifier pour le prof */}
+                     {(role === 'enseignant' || role === 'admin') && (
+                        <button onClick={() => openEditSae(selectedSae)} className="btn-primary" style={{marginRight: '10px', background: '#3b82f6', borderColor: '#3b82f6'}}>✏️ Modifier</button>
+                     )}
+                     <button onClick={() => setVueActuelle('dashboard')} className="btn-secondary">🔙 Retour</button>
+                   </div>
                 </div>
                 {selectedSae.date_rendu && <p style={{fontWeight:'bold', color:'var(--danger)', marginTop:'10px'}}>📅 Date limite : {formatDateTime(selectedSae.date_rendu)}</p>}
                 
@@ -502,6 +535,47 @@ function App() {
             </div>
           )}
 
+          {/* NOUVEAU : VUE ÉDITION DE SAE */}
+          {vueActuelle === 'edit-sae' && (
+            <div className="form-card-container">
+              <div className="card form-card" style={{maxWidth:'600px'}}>
+                <h2>Modifier la SAE</h2>
+                <form onSubmit={handleEditSae}>
+                  <div className="form-group">
+                    <label>Nom de la SAE</label>
+                    <input type="text" value={nomSae} onChange={(e) => setNomSae(e.target.value)} required />
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group" style={{flex:1}}>
+                      <label>Date de rendu</label>
+                      <input type="datetime-local" value={dateRenduSae} onChange={(e) => setDateRenduSae(e.target.value)} required />
+                    </div>
+                    <div className="form-group" style={{flex:1}}>
+                      <label>Classe cible</label>
+                      <select value={classeCible} onChange={(e) => setClasseCible(e.target.value)}>
+                        <option value="Toutes">Toutes les classes</option>
+                        {CLASSES_DISPOS.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Description / Consignes</label>
+                    <textarea value={descriptionSae} onChange={(e) => setDescriptionSae(e.target.value)} required style={{minHeight:'150px'}} />
+                  </div>
+                  <div className="form-group">
+                    <label>Ajouter des fichiers joints</label>
+                    <input type="file" multiple onChange={(e) => setFichiersSae(Array.from(e.target.files))} />
+                    <p style={{fontSize: '0.8rem', color: 'var(--text-muted)'}}>Les nouveaux fichiers seront ajoutés aux fichiers existants.</p>
+                  </div>
+                  <div style={{display:'flex', gap:'10px'}}>
+                    <button type="submit" className="btn-download" style={{flex:2}}>Enregistrer les modifications</button>
+                    <button type="button" onClick={() => { setSelectedSae(null); setVueActuelle('dashboard'); }} className="btn-secondary" style={{flex:1}}>Annuler</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+          
           {/* VUE : ADMIN */}
           {vueActuelle === 'admin' && (
             <div className="admin-layout">
