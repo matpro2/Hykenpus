@@ -155,7 +155,6 @@ app.get('/api/sae', verifierToken, async (req, res) => {
             return res.json(rows);
         } else {
             const userDb = await db.get('SELECT classe FROM Comptes WHERE id = ?', [req.user.id]);
-            // NOUVEAU : On fait un LEFT JOIN pour savoir si l'étudiant a rendu la SAE
             const rows = await db.all(`
                 SELECT SAE.*, Rendus.id AS rendu_id, Rendus.date_soumission 
                 FROM SAE 
@@ -192,7 +191,22 @@ app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, re
     }
 });
 
-// NOUVEAU : Récupérer les détails d'une seule SAE (avec le rendu de l'étudiant)
+// NOUVEAU RESTAURÉ : Récupérer les détails d'une seule SAE (avec le rendu de l'étudiant)
+app.get('/api/sae/:id', verifierToken, async (req, res) => {
+    try {
+        const sae = await db.get('SELECT * FROM SAE WHERE id = ?', [req.params.id]);
+        if (!sae) return res.status(404).json({ message: "SAE introuvable" });
+
+        let rendu = null;
+        if (req.user.role === 'etudiant') {
+            rendu = await db.get('SELECT * FROM Rendus WHERE sae_id = ? AND etudiant_id = ?', [req.params.id, req.user.id]);
+        }
+        res.json({ sae, rendu });
+    } catch (error) {
+        res.status(500).json({ message: "Erreur serveur" });
+    }
+});
+
 // NOUVEAU : Route pour modifier une SAE existante
 app.put('/api/sae/:id', verifierToken, upload.array('fichiers', 10), async (req, res) => {
     if (req.user.role !== 'enseignant' && req.user.role !== 'admin') {
@@ -203,7 +217,6 @@ app.put('/api/sae/:id', verifierToken, upload.array('fichiers', 10), async (req,
     const { nom, description, date_rendu, classe_cible } = req.body;
 
     try {
-        // Vérifier que la SAE existe et que le prof en est bien l'auteur
         const sae = await db.get('SELECT * FROM SAE WHERE id = ?', [saeId]);
         if (!sae) return res.status(404).json({ message: "SAE introuvable" });
         
@@ -211,7 +224,6 @@ app.put('/api/sae/:id', verifierToken, upload.array('fichiers', 10), async (req,
             return res.status(403).json({ message: "Vous ne pouvez modifier que vos propres SAE." });
         }
 
-        // Si le prof a ajouté de nouveaux fichiers, on les ajoute à la liste existante
         let documentsStr = sae.documents; 
         if (req.files && req.files.length > 0) {
             const anciensDocs = JSON.parse(sae.documents || '[]');
@@ -241,7 +253,6 @@ app.post('/api/sae/:id/rendu', verifierToken, upload.array('fichiers', 5), async
     const documentsStr = JSON.stringify(fichiersNoms);
 
     try {
-        // On vérifie si l'étudiant avait déjà rendu un truc (pour l'écraser)
         const existing = await db.get('SELECT id FROM Rendus WHERE sae_id = ? AND etudiant_id = ?', [sae_id, etudiant_id]);
         
         if (existing) {
