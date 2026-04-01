@@ -5,10 +5,15 @@ pass: 1*O=?S5ruR%;
 
 Codespace config:
 
-cd frontend; npm install 
----
-Run backend: cd backend; node server.js
-Run frontend: cd frontend; npm run dev
+SaeService.js -> export const SERVER_URL = '[codespace]-8000.app.github.dev';
+
+- cd backend
+- node server.js
+
+- cd frontend
+- npm install
+- npm run dev
+
 
 -- edit database
 supprimer mmi-hub.sqlite pour eviter les incoherance
