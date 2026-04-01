@@ -35,6 +35,12 @@ function App() {
   const [selectedRendu, setSelectedRendu] = useState(null);
   const [fichiersRendu, setFichiersRendu] = useState([]);
 
+  // NOUVEAU : États pour les Annonces
+  const [annonces, setAnnonces] = useState([]);
+  const [messageAnnonce, setMessageAnnonce] = useState('');
+  const [classeCibleAnnonce, setClasseCibleAnnonce] = useState('Toutes');
+  const [saeLieeAnnonce, setSaeLieeAnnonce] = useState('');
+  
   // NOUVEAU : États pour la gestion des classes
   const [etudiants, setEtudiants] = useState([]);
   const [classeGeree, setClasseGeree] = useState('');
@@ -57,16 +63,16 @@ function App() {
 
   useEffect(() => {
     setLoading(true); setErreur(null);
-    if (token) {
+if (token) {
       if (['public', 'login', 'register'].includes(vueActuelle)) setVueActuelle('dashboard');
       saeService.getListeSae(token).then(setSaes).catch(handleLogout).finally(() => setLoading(false));
       
+      // NOUVEAU : On charge les annonces !
+      saeService.getAnnonces(token).then(setAnnonces).catch(console.error);
+
       if (vueActuelle === 'admin' && role === 'admin') saeService.getAllUsers(token).then(setListeUtilisateurs).catch(console.error);
-      
-      // NOUVEAU : Charge la liste des étudiants si le prof ouvre la gestion des classes
-      if (vueActuelle === 'gestion-classe' && role === 'enseignant') {
-          saeService.getEtudiants(token).then(setEtudiants).catch(console.error);
-      }
+      if (vueActuelle === 'gestion-classe' && role === 'enseignant') saeService.getEtudiants(token).then(setEtudiants).catch(console.error);
+    
     } else {
       setVueActuelle(prev => ['dashboard', 'create-sae', 'admin', 'profile', 'sae-details', 'edit-sae', 'gestion-classe'].includes(prev) ? 'public' : prev);
       saeService.getPublicListeSae().then(setSaes).catch(console.error).finally(() => setLoading(false));
@@ -119,15 +125,13 @@ function App() {
       } catch(err) { setErreur(err.message); }
   };
 
-  const handleCreateSae = async (e) => {
+  const handleCreateAnnonce = async (e) => {
     e.preventDefault(); setErreur(null);
     try {
-      const formData = new FormData();
-      formData.append('nom', nomSae); formData.append('description', descriptionSae); formData.append('date_rendu', dateRenduSae); formData.append('classe_cible', classeCible); 
-      fichiersSae.forEach(f => formData.append('fichiers', f));
-      await saeService.createSae(formData, token);
-      const donnees = await saeService.getListeSae(token);
-      setSaes(donnees); setNomSae(''); setDescriptionSae(''); setDateRenduSae(''); setClasseCible('Toutes'); setFichiersSae([]); setVueActuelle('dashboard');
+      await saeService.createAnnonce({ message: messageAnnonce, classe_cible: classeCibleAnnonce, sae_id: saeLieeAnnonce || null }, token);
+      const data = await saeService.getAnnonces(token);
+      setAnnonces(data);
+      setMessageAnnonce(''); setSaeLieeAnnonce(''); setVueActuelle('dashboard'); setSucces("Annonce envoyée !");
     } catch (err) { setErreur(err.message); }
   };
 
@@ -259,6 +263,12 @@ function App() {
             <div className={`nav-item ${vueActuelle === 'create-sae' ? 'active' : ''}`} onClick={() => setVueActuelle('create-sae')}>
               ➕ Créer une SAE
             </div>
+          )}
+
+          {token && (role === 'enseignant' || role === 'admin') && (
+             <div className={`nav-item ${vueActuelle === 'create-annonce' ? 'active' : ''}`} onClick={() => setVueActuelle('create-annonce')}>
+                📢 Nouvelle Annonce
+             </div>
           )}
 
           {/* NOUVEAU : LE MENU DE GESTION DE CLASSES POUR LE PROF */}
@@ -398,6 +408,7 @@ function App() {
           {/* VUE : DASHBOARD / PUBLIC */}
 {/* VUE : DASHBOARD / PUBLIC */}
           {(vueActuelle === 'dashboard' || vueActuelle === 'public') && (
+
             <div className="sae-grid">
               {loading ? <p>Chargement des ressources...</p> : 
                getSaesTriees(saes).length > 0 ? getSaesTriees(saes).map(sae => {
@@ -444,8 +455,30 @@ function App() {
             </div>
           )}
 
-          {/* VUE : DÉTAILS DE LA SAE */}
+          {/* NOUVEAU : AFFICHAGE DES ANNONCES */}
+          {token && (vueActuelle === 'dashboard') && annonces.length > 0 && (
+            <div style={{ marginBottom: '2.5rem' }}>
+               <h2 style={{ borderBottom: '2px solid var(--border-color)', paddingBottom: '0.5rem', marginBottom: '1rem' }}>📢 Annonces</h2>
+               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {annonces.map(ann => (
+                     <div key={ann.id} style={{ backgroundColor: 'var(--bg-color)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                           <strong style={{ color: 'var(--primary)' }}>{ann.prenom} {ann.nom} <span className="badge badge-primary" style={{ marginLeft: '10px' }}>{ann.classe_cible}</span></strong>
+                           <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{formatDateTime(ann.date_creation)}</span>
+                        </div>
+                        <p style={{ whiteSpace: 'pre-line', margin: '0 0 15px 0' }}>{ann.message}</p>
+                        {ann.sae_id && (
+                           <button onClick={() => openSaeDetails(ann.sae_id)} className="btn-secondary" style={{ margin: 0, padding: '5px 10px', fontSize: '0.9rem' }}>
+                              🔗 Accéder à la SAE : {ann.sae_nom}
+                           </button>
+                        )}
+                     </div>
+                  ))}
+               </div>
+            </div>
+          )}
           {vueActuelle === 'sae-details' && selectedSae && (
+            
             <div className="admin-layout">
               <div className="card" style={{marginBottom: '2rem'}}>
                 <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start'}}>
@@ -616,6 +649,41 @@ function App() {
             </div>
           )}
 
+          {/* NOUVEAU : VUE CRÉATION D'ANNONCE */}
+          {vueActuelle === 'create-annonce' && (
+            <div className="form-card-container">
+              <div className="card form-card" style={{maxWidth:'600px'}}>
+                <h2>📢 Envoyer une annonce</h2>
+                <form onSubmit={handleCreateAnnonce}>
+                  <div className="form-row">
+                    <div className="form-group" style={{flex:1}}>
+                      <label>Classe cible</label>
+                      <select value={classeCibleAnnonce} onChange={(e) => setClasseCibleAnnonce(e.target.value)}>
+                        <option value="Toutes">Toutes mes classes</option>
+                        {classesDuProf.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group" style={{flex:1}}>
+                      <label>Lier à une SAE (Optionnel)</label>
+                      <select value={saeLieeAnnonce} onChange={(e) => setSaeLieeAnnonce(e.target.value)}>
+                        <option value="">-- Aucune SAE --</option>
+                        {saes.map(sae => <option key={sae.id} value={sae.id}>{sae.nom}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Votre message</label>
+                    <textarea placeholder="Saisissez votre annonce ici..." value={messageAnnonce} onChange={(e) => setMessageAnnonce(e.target.value)} required style={{minHeight:'100px'}} />
+                  </div>
+                  <div style={{display:'flex', gap:'10px'}}>
+                    <button type="submit" className="btn-download" style={{flex:2}}>Publier l'annonce</button>
+                    <button type="button" onClick={() => setVueActuelle('dashboard')} className="btn-secondary" style={{flex:1}}>Annuler</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+          
           {vueActuelle === 'edit-sae' && (
             <div className="form-card-container">
               <div className="card form-card" style={{maxWidth:'600px'}}>

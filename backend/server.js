@@ -70,6 +70,18 @@ async function initDB() {
             FOREIGN KEY (sae_id) REFERENCES SAE(id) ON DELETE CASCADE,
             FOREIGN KEY (etudiant_id) REFERENCES Comptes(id) ON DELETE CASCADE
         );
+
+        -- NOUVEAU : TABLE DES ANNONCES
+        CREATE TABLE IF NOT EXISTS Annonces (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            auteur_id INTEGER NOT NULL,
+            message TEXT NOT NULL,
+            classe_cible TEXT NOT NULL,
+            sae_id INTEGER,
+            date_creation TEXT NOT NULL,
+            FOREIGN KEY (auteur_id) REFERENCES Comptes(id) ON DELETE CASCADE,
+            FOREIGN KEY (sae_id) REFERENCES SAE(id) ON DELETE CASCADE
+        );
     `);
 
     const adminExists = await db.get('SELECT * FROM Comptes WHERE mail = ?', ['Admin']);
@@ -80,9 +92,8 @@ async function initDB() {
             ['Système', 'Admin', 'Admin', hashedAdminPw, 'admin', '["Toutes"]']
         );
     }
-    console.log("✅ Base de données locale prête !");
+    console.log("✅ Base de données locale prête (Avec système d'Annonces) !");
 }
-initDB();
 
 app.get('/api/public/sae', async (req, res) => {
     try {
@@ -368,6 +379,33 @@ app.put('/api/enseignant/etudiants/:id/classe', verifierToken, async (req, res) 
         await db.run("UPDATE Comptes SET classe = ? WHERE id = ? AND role = 'etudiant'", [nouvelleClasse, req.params.id]);
         res.json({ message: "Classe de l'élève mise à jour" });
     } catch (error) { res.status(500).json({ message: "Erreur" }); }
+});
+
+// --- NOUVELLES ROUTES : ANNONCES ---
+app.get('/api/annonces', verifierToken, async (req, res) => {
+    try {
+        if (req.user.role === 'admin') {
+            const rows = await db.all(`SELECT Annonces.*, Comptes.nom, Comptes.prenom, SAE.nom AS sae_nom FROM Annonces JOIN Comptes ON Annonces.auteur_id = Comptes.id LEFT JOIN SAE ON Annonces.sae_id = SAE.id ORDER BY id DESC`);
+            return res.json(rows);
+        } else if (req.user.role === 'enseignant') {
+            const rows = await db.all(`SELECT Annonces.*, Comptes.nom, Comptes.prenom, SAE.nom AS sae_nom FROM Annonces JOIN Comptes ON Annonces.auteur_id = Comptes.id LEFT JOIN SAE ON Annonces.sae_id = SAE.id WHERE auteur_id = ? ORDER BY id DESC`, [req.user.id]);
+            return res.json(rows);
+        } else {
+            const userDb = await db.get('SELECT classe FROM Comptes WHERE id = ?', [req.user.id]);
+            const rows = await db.all(`SELECT Annonces.*, Comptes.nom, Comptes.prenom, SAE.nom AS sae_nom FROM Annonces JOIN Comptes ON Annonces.auteur_id = Comptes.id LEFT JOIN SAE ON Annonces.sae_id = SAE.id WHERE Annonces.classe_cible = ? OR Annonces.classe_cible = 'Toutes' ORDER BY id DESC`, [userDb.classe]);
+            return res.json(rows);
+        }
+    } catch (error) { res.status(500).json({ message: "Erreur serveur" }); }
+});
+
+app.post('/api/annonces', verifierToken, async (req, res) => {
+    if (req.user.role !== 'enseignant' && req.user.role !== 'admin') return res.status(403).json({ message: "Refusé" });
+    const { message, classe_cible, sae_id } = req.body;
+    const date_creation = new Date().toISOString();
+    try {
+        await db.run('INSERT INTO Annonces (auteur_id, message, classe_cible, sae_id, date_creation) VALUES (?, ?, ?, ?, ?)', [req.user.id, message, classe_cible || 'Toutes', sae_id || null, date_creation]);
+        res.status(201).json({ message: "Annonce publiée !" });
+    } catch (error) { res.status(500).json({ message: "Erreur serveur" }); }
 });
 
 app.listen(PORT, () => {

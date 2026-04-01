@@ -92,7 +92,22 @@ export const saeService = {
     if (!response.ok) throw new Error(data.message);
     return data;
   },
-  // NOUVEAU : Fonctions de gestion de classe pour le professeur
+  
+  // --- NOUVEAU : ANNONCES ---
+  getAnnonces: async (token) => {
+    const response = await fetch(`${API_BASE_URL}/annonces`, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!response.ok) throw new Error("Erreur annonces");
+    return await response.json();
+  },
+  createAnnonce: async (annonceData, token) => {
+    const response = await fetch(`${API_BASE_URL}/annonces`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(annonceData)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message);
+    return data;
+  },
+
   getEtudiants: async (token) => {
     const response = await fetch(`${API_BASE_URL}/enseignant/etudiants`, {
       headers: { 'Authorization': `Bearer ${token}` }
