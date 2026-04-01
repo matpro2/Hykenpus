@@ -29,6 +29,9 @@ function App() {
   const [dateRenduSae, setDateRenduSae] = useState(''); 
   const [classeCible, setClasseCible] = useState('Toutes'); 
   const [fichiersSae, setFichiersSae] = useState([]); 
+
+  const [estPublique, setEstPublique] = useState(false);
+  const [afficherRendus, setAfficherRendus] = useState(false);
   
   const [selectedSae, setSelectedSae] = useState(null);
   const [selectedRendu, setSelectedRendu] = useState(null);
@@ -73,7 +76,6 @@ function App() {
   useEffect(() => {
     setLoading(true); setErreur(null);
     if (token) {
-      // Redirection : l'admin va sur son panneau, les autres sur le dashboard
       if (['public', 'login', 'register'].includes(vueActuelle)) {
         setVueActuelle(role === 'admin' ? 'admin' : 'dashboard');
       }
@@ -147,6 +149,7 @@ function App() {
 
   const openEditSae = (sae) => {
     setNomSae(sae.nom); setDescriptionSae(sae.description); setDateRenduSae(sae.date_rendu || ''); setClasseCible(sae.classe_cible || 'Toutes');
+    setEstPublique(sae.est_publique === 1); setAfficherRendus(sae.afficher_rendus === 1); 
     setSelectedSae(sae); setFichiersSae([]); setErreur(null); setVueActuelle('edit-sae');
   };
 
@@ -155,6 +158,8 @@ function App() {
     try {
       const formData = new FormData();
       formData.append('nom', nomSae); formData.append('description', descriptionSae); formData.append('date_rendu', dateRenduSae); formData.append('classe_cible', classeCible);
+      formData.append('est_publique', estPublique ? '1' : '0');
+      formData.append('afficher_rendus', afficherRendus ? '1' : '0');
       fichiersSae.forEach(f => formData.append('fichiers', f));
       await saeService.updateSae(selectedSae.id, formData, token);
       const data = await saeService.getListeSae(token);
@@ -175,12 +180,16 @@ function App() {
     try {
       const formData = new FormData();
       formData.append('nom', nomSae); formData.append('description', descriptionSae); formData.append('date_rendu', dateRenduSae); formData.append('classe_cible', classeCible);
+      formData.append('est_publique', estPublique ? '1' : '0');
+      formData.append('afficher_rendus', afficherRendus ? '1' : '0');
       fichiersSae.forEach(f => formData.append('fichiers', f));
 
       await saeService.createSae(formData, token);
       const data = await saeService.getListeSae(token);
       setSaes(data);
-      setNomSae(''); setDescriptionSae(''); setDateRenduSae(''); setClasseCible('Toutes'); setFichiersSae([]); setVueActuelle('dashboard');
+      setNomSae(''); setDescriptionSae(''); setDateRenduSae(''); setClasseCible('Toutes'); setFichiersSae([]); 
+      setEstPublique(false); setAfficherRendus(false);
+      setVueActuelle('dashboard');
       setSucces("SAE publiée avec succès !");
     } catch (err) { setErreur(err.message); }
   };
@@ -333,7 +342,11 @@ function App() {
           {token && (role === 'enseignant' || role === 'admin') && (
             <>
               <span className="nav-label">Sujets</span>
-              <div className={`nav-item ${vueActuelle === 'create-sae' ? 'active' : ''}`} onClick={() => setVueActuelle('create-sae')}>
+              <div className={`nav-item ${vueActuelle === 'create-sae' ? 'active' : ''}`} onClick={() => {
+                  setNomSae(''); setDescriptionSae(''); setDateRenduSae(''); setClasseCible('Toutes'); 
+                  setEstPublique(false); setAfficherRendus(false); setFichiersSae([]);
+                  setVueActuelle('create-sae');
+              }}>
                 <i className="fa-solid fa-folder-plus icon"></i> <span>Nouveau Sujet</span>
               </div>
               <div className={`nav-item ${vueActuelle === 'create-annonce' ? 'active' : ''}`} onClick={() => setVueActuelle('create-annonce')}>
@@ -466,7 +479,7 @@ function App() {
                 const pourcentage = sae.nb_etudiants_cibles > 0 ? Math.round((sae.nb_rendus / sae.nb_etudiants_cibles) * 100) : 0;
                 
                 return (
-                  <div key={sae.id} className="card" onClick={() => token && openSaeDetails(sae.id)}>
+                  <div key={sae.id} className="card" style={{cursor: token ? 'pointer' : 'default'}} onClick={() => token && openSaeDetails(sae.id)}>
                     <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
                       <span className="badge badge-primary">{sae.classe_cible}</span>
                       <span className={`badge badge-${statut.couleur}`}>{statut.texte}</span>
@@ -475,7 +488,7 @@ function App() {
                     <h3 className="card-title">{sae.nom}</h3>
                     <p className="card-desc">{sae.description.substring(0, 100)}...</p>
                     
-                    <div className="card-footer" style={{marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--border-color)'}}>
+                    <div className="card-footer" style={{marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--border)'}}>
                       <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '8px'}}>
                         <span style={{color: 'var(--text-muted)'}}><i className="fa-solid fa-calendar-days" style={{marginRight: '5px'}}></i> {formatDateTime(sae.date_rendu) || 'Sans date'}</span>
                       </div>
@@ -489,6 +502,25 @@ function App() {
                         </div>
                       )}
                     </div>
+                    
+                    {/* AFFICHAGE DES RENDUS SUR LA VUE PUBLIQUE */}
+                    {!token && sae.afficher_rendus === 1 && sae.rendus_publics && sae.rendus_publics.length > 0 && (
+                      <div style={{marginTop: '15px', paddingTop: '10px', borderTop: '1px solid var(--border)'}}>
+                        <h4 style={{fontSize: '0.85rem', marginBottom: '8px', color: 'var(--primary)'}}>
+                          <i className="fa-solid fa-graduation-cap" style={{marginRight: '5px'}}></i> Travaux des étudiants
+                        </h4>
+                        <div style={{display: 'flex', flexDirection: 'column', gap: '5px'}}>
+                          {sae.rendus_publics.map((rendu, i) => {
+                             const docs = JSON.parse(rendu.documents);
+                             return docs.map((doc, j) => (
+                               <a key={`${i}-${j}`} href={`${SERVER_URL}/uploads/${doc}`} target="_blank" rel="noreferrer" style={{fontSize: '0.8rem', color: 'var(--text-main)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '5px'}}>
+                                 <i className="fa-solid fa-file-pdf" style={{color: 'var(--danger)'}}></i> {rendu.prenom} - {doc.split('-').slice(1).join('-')}
+                               </a>
+                             ));
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -686,12 +718,18 @@ function App() {
             </div>
           )}
 
-          {/* VUE : CREATE SAE */}
-          {vueActuelle === 'create-sae' && (
+          {/* VUE : CREATE SAE / EDIT SAE */}
+          {(vueActuelle === 'create-sae' || vueActuelle === 'edit-sae') && (
             <div className="form-card-container">
               <div className="card form-card" style={{maxWidth:'650px'}}>
-                <h2><i className="fa-solid fa-file-circle-plus" style={{marginRight: '10px'}}></i> Publier un nouveau sujet</h2>
-                <form onSubmit={handleCreateSae} style={{marginTop:'1.5rem'}}>
+                <h2>
+                  {vueActuelle === 'edit-sae' ? (
+                    <><i className="fa-solid fa-pen-to-square" style={{marginRight: '10px'}}></i> Modifier la SAE</>
+                  ) : (
+                    <><i className="fa-solid fa-file-circle-plus" style={{marginRight: '10px'}}></i> Publier un nouveau sujet</>
+                  )}
+                </h2>
+                <form onSubmit={vueActuelle === 'edit-sae' ? handleEditSae : handleCreateSae} style={{marginTop:'1.5rem'}}>
                   <div className="form-group">
                     <label>Nom de la SAE</label>
                     <input type="text" value={nomSae} onChange={(e) => setNomSae(e.target.value)} required placeholder="Ex: SAE 301 - Développement Web" />
@@ -717,8 +755,24 @@ function App() {
                     <label><i className="fa-solid fa-paperclip" style={{marginRight: '5px'}}></i> Fichiers ressources (PDF, ZIP...)</label>
                     <input type="file" multiple onChange={(e) => setFichiersSae(Array.from(e.target.files))} />
                   </div>
+                  
+                  <div className="form-group" style={{ display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'var(--primary-soft)', padding: '1rem', borderRadius: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0, fontWeight: 'bold' }}>
+                        <input type="checkbox" checked={estPublique} onChange={(e) => { setEstPublique(e.target.checked); if(!e.target.checked) setAfficherRendus(false); }} style={{ width: 'auto' }} />
+                        Mettre cette SAE en mode "Vitrine" (Vue publique)
+                    </label>
+                    {estPublique && (
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', margin: 0, paddingLeft: '25px' }}>
+                            <input type="checkbox" checked={afficherRendus} onChange={(e) => setAfficherRendus(e.target.checked)} style={{ width: 'auto' }} />
+                            Afficher les travaux rendus par les étudiants
+                        </label>
+                    )}
+                  </div>
+
                   <div style={{display:'flex', gap:'12px', marginTop:'10px'}}>
-                    <button type="submit" className="btn-primary" style={{flex:2}}>Publier la SAE</button>
+                    <button type="submit" className="btn-primary" style={{flex:2}}>
+                      {vueActuelle === 'edit-sae' ? 'Enregistrer les modifications' : 'Publier la SAE'}
+                    </button>
                     <button type="button" onClick={() => setVueActuelle(role === 'admin' ? 'admin' : 'dashboard')} className="btn-secondary" style={{flex:1}}>Annuler</button>
                   </div>
                 </form>

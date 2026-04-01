@@ -59,6 +59,8 @@ async function initDB() {
             date_rendu TEXT,
             classe_cible TEXT,
             statut TEXT DEFAULT 'validee', 
+            est_publique INTEGER DEFAULT 0,
+            afficher_rendus INTEGER DEFAULT 0,
             FOREIGN KEY (auteur_id) REFERENCES Comptes(id) ON DELETE CASCADE
         );
 
@@ -101,7 +103,7 @@ initDB().catch(err => {
 });
 
 // ==========================================
-// ⚠️ MIDDLEWARE AUTHENTIFICATION (Remonté ici)
+// ⚠️ MIDDLEWARE AUTHENTIFICATION
 // ==========================================
 const verifierToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -158,8 +160,21 @@ app.post('/api/login', async (req, res) => {
 
 app.get('/api/public/sae', async (req, res) => {
     try {
-        const rows = await db.all(`SELECT SAE.*, Comptes.nom AS auteur_nom, Comptes.prenom AS auteur_prenom FROM SAE JOIN Comptes ON SAE.auteur_id = Comptes.id WHERE SAE.statut = 'validee'`);
-        res.json(rows);
+        const saes = await db.all(`SELECT SAE.*, Comptes.nom AS auteur_nom, Comptes.prenom AS auteur_prenom FROM SAE JOIN Comptes ON SAE.auteur_id = Comptes.id WHERE SAE.statut = 'validee' AND SAE.est_publique = 1`);
+        
+        for (let sae of saes) {
+            if (sae.afficher_rendus === 1) {
+                sae.rendus_publics = await db.all(`
+                    SELECT Rendus.documents, Rendus.date_soumission, Comptes.prenom 
+                    FROM Rendus 
+                    JOIN Comptes ON Rendus.etudiant_id = Comptes.id 
+                    WHERE Rendus.sae_id = ?
+                `, [sae.id]);
+            } else {
+                sae.rendus_publics = [];
+            }
+        }
+        res.json(saes);
     } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur" }); }
 });
 
@@ -194,6 +209,8 @@ app.get('/api/sae', verifierToken, async (req, res) => {
 app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, res) => {
     if (req.user.role !== 'enseignant' && req.user.role !== 'admin') return res.status(403).json({ message: "Non autorisé." });
     const { nom, description, date_rendu, classe_cible } = req.body;
+    const est_publique = req.body.est_publique === '1' ? 1 : 0;
+    const afficher_rendus = req.body.afficher_rendus === '1' ? 1 : 0;
     const auteur_id = req.user.id; 
     const date_creation = new Date().toISOString().split('T')[0]; 
     const fichiersNoms = req.files ? req.files.map(f => f.filename) : [];
@@ -202,7 +219,7 @@ app.post('/api/sae', verifierToken, upload.array('fichiers', 10), async (req, re
     const statut = req.user.role === 'admin' ? 'validee' : 'en_attente';
 
     try {
-        await db.run('INSERT INTO SAE (nom, auteur_id, description, date_creation, documents, date_rendu, classe_cible, statut) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [nom, auteur_id, description, date_creation, documentsStr, date_rendu, classe_cible || 'Toutes', statut]);
+        await db.run('INSERT INTO SAE (nom, auteur_id, description, date_creation, documents, date_rendu, classe_cible, statut, est_publique, afficher_rendus) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [nom, auteur_id, description, date_creation, documentsStr, date_rendu, classe_cible || 'Toutes', statut, est_publique, afficher_rendus]);
         res.status(201).json({ message: "SAE créée !" });
     } catch (error) { console.error(error); res.status(500).json({ message: "Erreur serveur" }); }
 });
@@ -211,6 +228,9 @@ app.put('/api/sae/:id', verifierToken, upload.array('fichiers', 10), async (req,
     if (req.user.role !== 'enseignant' && req.user.role !== 'admin') return res.status(403).json({ message: "Non autorisé." });
     const saeId = req.params.id;
     const { nom, description, date_rendu, classe_cible } = req.body;
+    const est_publique = req.body.est_publique === '1' ? 1 : 0;
+    const afficher_rendus = req.body.afficher_rendus === '1' ? 1 : 0;
+    
     try {
         const sae = await db.get('SELECT * FROM SAE WHERE id = ?', [saeId]);
         if (!sae) return res.status(404).json({ message: "SAE introuvable" });
@@ -222,7 +242,7 @@ app.put('/api/sae/:id', verifierToken, upload.array('fichiers', 10), async (req,
             const nouveauxDocs = req.files.map(f => f.filename);
             documentsStr = JSON.stringify([...anciensDocs, ...nouveauxDocs]);
         }
-        await db.run('UPDATE SAE SET nom = ?, description = ?, date_rendu = ?, classe_cible = ?, documents = ? WHERE id = ?', [nom, description, date_rendu, classe_cible || 'Toutes', documentsStr, saeId]);
+        await db.run('UPDATE SAE SET nom = ?, description = ?, date_rendu = ?, classe_cible = ?, documents = ?, est_publique = ?, afficher_rendus = ? WHERE id = ?', [nom, description, date_rendu, classe_cible || 'Toutes', documentsStr, est_publique, afficher_rendus, saeId]);
         res.json({ message: "SAE modifiée avec succès !" });
     } catch (error) { console.error(error); res.status(500).json({ message: "Erreur lors de la modification" }); }
 });
